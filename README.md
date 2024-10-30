@@ -22,10 +22,11 @@
 
 # 第二部分 快速开始
 
-## 2.1 安装和使用
+## 2.1 安装
 
 ```bash
 $ go get github.com/jianggujin/go-dbfly
 ```
 
+**提示:** `go-dbfly`使用 [Go Modules](https://go.dev/wiki/Modules) 管理依赖。
 
