@@ -2,15 +2,20 @@ package dbfly
 
 import (
 	"embed"
+	"errors"
+	"fmt"
 	"github.com/hashicorp/go-version"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
 type SourceInfo struct {
+	// 版本
 	Version *version.Version
-	Uid     string
+	// 唯一编号
+	Uid string
+	// 是否为纯脚本
+	Script bool
 }
 
 // SQL源信息
@@ -39,16 +44,28 @@ func (s *EmbedFSSource) Scan() ([]*SourceInfo, error) {
 			return nil, err
 		}
 		for _, f := range files {
-			if f.IsDir() || !strings.HasSuffix(f.Name(), ".xml") {
+			if f.IsDir() {
 				continue
 			}
-			v, err := version.NewVersion(strings.TrimSuffix(f.Name(), ".xml"))
+			verStr := ""
+			script := false
+			if strings.HasSuffix(f.Name(), ".xml") {
+				verStr = strings.TrimSuffix(f.Name(), ".xml")
+			} else if strings.HasSuffix(f.Name(), ".sql") {
+				verStr = strings.TrimSuffix(f.Name(), ".sql")
+				script = true
+			}
+			if verStr == "" {
+				continue
+			}
+			v, err := version.NewVersion(verStr)
 			if err != nil {
 				return nil, err
 			}
 			infos = append(infos, &SourceInfo{
 				Version: v,
 				Uid:     path + "/" + f.Name(),
+				Script:  script,
 			})
 		}
 	}
@@ -76,16 +93,28 @@ func (s *FSSource) Scan() ([]*SourceInfo, error) {
 			return nil, err
 		}
 		for _, f := range files {
-			if f.IsDir() || !strings.HasSuffix(f.Name(), ".xml") {
+			if f.IsDir() {
 				continue
 			}
-			v, err := version.NewVersion(strings.TrimSuffix(f.Name(), ".xml"))
+			verStr := ""
+			script := false
+			if strings.HasSuffix(f.Name(), ".xml") {
+				verStr = strings.TrimSuffix(f.Name(), ".xml")
+			} else if strings.HasSuffix(f.Name(), ".sql") {
+				verStr = strings.TrimSuffix(f.Name(), ".sql")
+				script = true
+			}
+			if verStr == "" {
+				continue
+			}
+			v, err := version.NewVersion(verStr)
 			if err != nil {
 				return nil, err
 			}
 			infos = append(infos, &SourceInfo{
 				Version: v,
-				Uid:     filepath.Join(path, f.Name()),
+				Uid:     path + "/" + f.Name(),
+				Script:  script,
 			})
 		}
 	}
@@ -94,4 +123,43 @@ func (s *FSSource) Scan() ([]*SourceInfo, error) {
 
 func (s *FSSource) Read(uid string) ([]byte, error) {
 	return os.ReadFile(uid)
+}
+
+// 嵌入源实现
+type EmbedSource struct {
+	Sources map[string]*EmbedSourceInfo
+}
+
+type EmbedSourceInfo struct {
+	// 是否为纯脚本
+	Script bool
+	// 内容
+	Content []byte
+}
+
+func (s *EmbedSource) Scan() ([]*SourceInfo, error) {
+	var infos []*SourceInfo
+	if s.Sources == nil {
+		return []*SourceInfo{}, nil
+	}
+	for vers, source := range s.Sources {
+		ver, err := version.NewVersion(vers)
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, &SourceInfo{
+			Version: ver,
+			Uid:     vers,
+			Script:  source.Script,
+		})
+	}
+	return infos, nil
+}
+
+func (s *EmbedSource) Read(uid string) ([]byte, error) {
+	source, ok := s.Sources[uid]
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("source [%s] not exists", uid))
+	}
+	return source.Content, nil
 }
