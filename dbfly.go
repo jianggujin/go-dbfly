@@ -9,6 +9,9 @@ import (
 	"sort"
 )
 
+// 默认用于记录版本变化的表名
+const changeTableName = "dbfly_change_log"
+
 type Dbfly struct {
 	migratory       Migratory
 	driver          Driver
@@ -35,6 +38,9 @@ func (f *Dbfly) Migrate() error {
 }
 
 func (f *Dbfly) MigrateContext(ctx context.Context) error {
+	if f.changeTableName == "" {
+		f.changeTableName = changeTableName
+	}
 	// 1 查找版本
 	sources, err := f.source.Scan()
 	if err != nil {

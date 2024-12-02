@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// 默认用于记录版本变化的表名
-const changeTableName = "dbfly_change_log"
 const allDialect = "$all"
 const (
 	Varchar   = "VARCHAR"
