@@ -56,7 +56,7 @@ func (m *PostgresMigratory) InitChangeLogTable(ctx context.Context, driver Drive
 
 func (m *PostgresMigratory) CreateTable(ctx context.Context, driver Driver, node *CreateTableNode) error {
 	var builder strings.Builder
-	builder.WriteString("create table ")
+	builder.WriteString("CREATE TABLE ")
 	builder.WriteString(node.TableName)
 	builder.WriteString("\n(\n")
 	size := len(node.Columns)

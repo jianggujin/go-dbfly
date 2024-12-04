@@ -56,7 +56,7 @@ func (m *MysqlMigratory) InitChangeLogTable(ctx context.Context, driver Driver, 
 
 func (m *MysqlMigratory) CreateTable(ctx context.Context, driver Driver, node *CreateTableNode) error {
 	var builder strings.Builder
-	builder.WriteString("create table ")
+	builder.WriteString("CREATE TABLE ")
 	builder.WriteString(node.TableName)
 	builder.WriteString("\n(\n")
 	size := len(node.Columns)
