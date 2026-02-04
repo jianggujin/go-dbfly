@@ -14,9 +14,9 @@ func splitSQLStatements(sqlText string) []string {
 
 	addStatement := func() {
 		if currentStmt.Len() != 0 {
-			currentStmt := strings.TrimSpace(currentStmt.String())
-			if currentStmt != "" {
-				statements = append(statements, currentStmt)
+			statement := strings.TrimSpace(currentStmt.String())
+			if statement != "" {
+				statements = append(statements, statement)
 			}
 		}
 		currentStmt.Reset()
@@ -78,9 +78,9 @@ func splitSQLStatements(sqlText string) []string {
 // 针对字符串、DECIMAL等数据类型添加长度约束
 func columnType(dataType, columnType string, maxLength, numericScale int) string {
 	switch dataType {
-	case "VARCHAR", "CHAR":
+	case Varchar, Char:
 		return fmt.Sprintf("%s(%d)", columnType, maxLength)
-	case "DECIMAL":
+	case Decimal:
 		if numericScale > 0 {
 			return fmt.Sprintf("%s(%d, %d)", columnType, maxLength, numericScale)
 		}
@@ -88,4 +88,8 @@ func columnType(dataType, columnType string, maxLength, numericScale int) string
 	default:
 		return columnType
 	}
+}
+
+func ReplaceRemarks(remarks string) string {
+	return strings.ReplaceAll(remarks, "'", "''")
 }

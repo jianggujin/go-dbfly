@@ -2,6 +2,7 @@ package dbfly
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -23,35 +24,17 @@ var MysqlDataTypeMappers = map[string]string{
 	Blob:      "BLOB",
 }
 
-// Mysql合并实现
+// MysqlMigratory Mysql合并实现
 type MysqlMigratory struct {
 	DefaultMigratory
 }
 
-// 创建一个Mysql合并实现实例
+// NewMysqlMigratory 创建一个Mysql合并实现实例
 func NewMysqlMigratory() Migratory {
+	showTablesSql := "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()"
 	return &MysqlMigratory{
-		DefaultMigratory{name: "mysql"},
+		DefaultMigratory{name: "mysql", showTablesSql: showTablesSql, dataTypeMapper: MysqlDataTypeMappers},
 	}
-}
-
-// 初始化变更记录表
-func (m *MysqlMigratory) InitChangeLogTable(ctx context.Context, driver Driver, changeTableName string) error {
-	rows, err := driver.Query(ctx, "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()")
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var tableName string
-		if err := rows.Scan(&tableName); err != nil {
-			return err
-		}
-		if changeTableName == strings.ToLower(tableName) {
-			return nil
-		}
-	}
-	return driver.Execute(ctx, "CREATE TABLE "+changeTableName+"(id BIGINT PRIMARY KEY AUTO_INCREMENT, change_version VARCHAR(255) NOT NULL, is_success TINYINT DEFAULT 0 NOT NULL, created_at DATETIME, updated_at DATETIME) ENGINE = InnoDB")
 }
 
 func (m *MysqlMigratory) CreateTable(ctx context.Context, driver Driver, node *CreateTableNode) error {
@@ -60,61 +43,39 @@ func (m *MysqlMigratory) CreateTable(ctx context.Context, driver Driver, node *C
 	builder.WriteString(node.TableName)
 	builder.WriteString("\n(\n")
 	size := len(node.Columns)
+	var pkColumn *ColumnNode
 	for index, column := range node.Columns {
 		builder.WriteString("  ")
-		m.createTableColumn(column, &builder)
+		if pk := m.createTableColumn(column, &builder); pk {
+			if pkColumn != nil {
+				return errors.New("multiple primary key columns are not allowed to be defined")
+			}
+			if column.KeyName == "" {
+				builder.WriteString(" PRIMARY KEY")
+			}
+			pkColumn = column
+		}
 		if index < size-1 {
 			builder.WriteString(",\n")
 		}
 	}
-	builder.WriteString("\n) ENGINE = InnoDB\n  DEFAULT CHARSET = utf8mb4")
-	if node.Remarks != "" {
-		builder.WriteString(" COMMENT '")
-		builder.WriteString(strings.ReplaceAll(node.Remarks, "'", "''"))
-		builder.WriteString("'")
+	if pkColumn != nil && pkColumn.KeyName != "" {
+		builder.WriteString(",\n  CONSTRAINT ")
+		builder.WriteString(pkColumn.KeyName)
+		builder.WriteString(" PRIMARY KEY (")
+		builder.WriteString(pkColumn.ColumnName)
+		builder.WriteString(")")
 	}
-	return driver.Execute(ctx, builder.String())
-}
-
-func (m *MysqlMigratory) createTableColumn(node *ColumnNode, builder *strings.Builder) {
-	var dialectNode *ColumnDialectNode
-	// 查找方言
-	for _, dialect := range node.Dialects {
-		if dialect.Dialect == m.Name() {
-			dialectNode = dialect
-			break
-		}
-	}
-	builder.WriteString(node.ColumnName)
-	builder.WriteString(" ")
-	var defaultValue string
-	if dialectNode != nil {
-		builder.WriteString(dialectNode.DataType)
-		if dialectNode.DefaultOriginValue != "" {
-			defaultValue = dialectNode.DefaultOriginValue
-		} else if dialectNode.DefaultValue != "" {
-			defaultValue = fmt.Sprintf("'%s'", strings.ReplaceAll(dialectNode.DefaultValue, "'", "''"))
-		}
-	} else {
-		builder.WriteString(columnType(node.DataType, MysqlDataTypeMappers[node.DataType], node.MaxLength, node.NumericScale))
-		if node.DefaultOriginValue != "" {
-			defaultValue = node.DefaultOriginValue
-		} else if node.DefaultValue != "" {
-			defaultValue = fmt.Sprintf("'%s'", strings.ReplaceAll(node.DefaultValue, "'", "''"))
-		}
-	}
-	if node.PrimaryKey {
-		builder.WriteString(" PRIMARY KEY")
-	} else {
-		if defaultValue != "" {
-			builder.WriteString(" DEFAULT ")
-			builder.WriteString(defaultValue)
-		}
-		if node.Unique {
-			builder.WriteString(" UNIQUE")
-		}
-		if !node.Nullable {
-			builder.WriteString(" NOT NULL")
+	builder.WriteString("\n)")
+	if len(node.Attributes) > 0 {
+		for _, attr := range node.Attributes {
+			if attr.Dialect != m.Name() {
+				continue
+			}
+			builder.WriteString(" ")
+			builder.WriteString(attr.Name)
+			builder.WriteString(" = ")
+			builder.WriteString(attr.Value)
 		}
 	}
 	if node.Remarks != "" {
@@ -122,42 +83,18 @@ func (m *MysqlMigratory) createTableColumn(node *ColumnNode, builder *strings.Bu
 		builder.WriteString(strings.ReplaceAll(node.Remarks, "'", "''"))
 		builder.WriteString("'")
 	}
-}
-
-func (m *MysqlMigratory) CreateIndex(ctx context.Context, driver Driver, node *CreateIndexNode) error {
-	var builder strings.Builder
-	builder.WriteString("CREATE")
-	if node.Unique {
-		builder.WriteString(" UNIQUE")
-	}
-	builder.WriteString(" INDEX ")
-	builder.WriteString(node.IndexName)
-	builder.WriteString(" ON ")
-	builder.WriteString(node.TableName)
-	builder.WriteString(" (")
-	var columns []string
-	for _, columnNode := range node.Columns {
-		columns = append(columns, columnNode.ColumnName)
-	}
-	builder.WriteString(strings.Join(columns, ", "))
-	builder.WriteString(")")
 	return driver.Execute(ctx, builder.String())
 }
 
-func (m *MysqlMigratory) CreatePrimaryKey(ctx context.Context, driver Driver, node *CreatePrimaryKeyNode) error {
-	var builder strings.Builder
-	builder.WriteString("ALTER TABLE ")
-	builder.WriteString(node.TableName)
-	builder.WriteString(" ADD CONSTRAINT ")
-	builder.WriteString(node.KeyName)
-	builder.WriteString(" PRIMARY KEY (")
-	builder.WriteString(node.Column.ColumnName)
-	builder.WriteString(")")
-	return driver.Execute(ctx, builder.String())
-}
+func (m *MysqlMigratory) createTableColumn(node *ColumnNode, builder *strings.Builder) bool {
+	pk := m.DefaultMigratory.CreateTableColumn(node, builder)
 
-func (m *MysqlMigratory) DropTable(ctx context.Context, driver Driver, node *DropTableNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("DROP TABLE %s", node.TableName))
+	if node.Remarks != "" {
+		builder.WriteString(" COMMENT '")
+		builder.WriteString(strings.ReplaceAll(node.Remarks, "'", "''"))
+		builder.WriteString("'")
+	}
+	return pk
 }
 
 func (m *MysqlMigratory) DropIndex(ctx context.Context, driver Driver, node *DropIndexNode) error {
@@ -170,7 +107,9 @@ func (m *MysqlMigratory) AddColumn(ctx context.Context, driver Driver, node *Add
 		builder.WriteString("ALTER TABLE ")
 		builder.WriteString(node.TableName)
 		builder.WriteString(" ADD ")
-		m.createTableColumn(column, &builder)
+		if pk := m.createTableColumn(column, &builder); pk {
+			return errors.New("adding columns is not allowed as a primary key")
+		}
 		if err := driver.Execute(ctx, builder.String()); err != nil {
 			return err
 		}
@@ -182,23 +121,12 @@ func (m *MysqlMigratory) AlterColumn(ctx context.Context, driver Driver, node *A
 	var builder strings.Builder
 	builder.WriteString("ALTER TABLE ")
 	builder.WriteString(node.TableName)
-	if node.ColumnName == node.Column.ColumnName {
-		builder.WriteString(" MODIFY ")
-	} else {
-		builder.WriteString(" CHANGE ")
-		builder.WriteString(node.ColumnName)
-		builder.WriteString(" ")
+	builder.WriteString(" MODIFY ")
+	node.Column.ColumnName = node.ColumnName
+	if pk := m.createTableColumn(node.Column, &builder); pk {
+		return errors.New("alter columns is not allowed as a primary key")
 	}
-	m.createTableColumn(node.Column, &builder)
 	return driver.Execute(ctx, builder.String())
-}
-
-func (m *MysqlMigratory) DropColumn(ctx context.Context, driver Driver, node *DropColumnNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", node.TableName, node.ColumnName))
-}
-
-func (m *MysqlMigratory) DropPrimaryKey(ctx context.Context, driver Driver, node *DropPrimaryKeyNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", node.TableName))
 }
 
 func (m *MysqlMigratory) RenameTable(ctx context.Context, driver Driver, node *RenameTableNode) error {

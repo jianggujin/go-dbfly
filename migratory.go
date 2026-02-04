@@ -2,8 +2,11 @@ package dbfly
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/hashicorp/go-version"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -25,18 +28,33 @@ const (
 	Blob      = "BLOB"
 )
 
-// 节点接口
+const (
+	COLUMN_ID             = "ID"
+	COLUMN_CHANGE_VERSION = "CHANGE_VERSION"
+	COLUMN_IS_SUCCESS     = "IS_SUCCESS"
+	COLUMN_CREATED_AT     = "CREATED_AT"
+	COLUMN_UPDATED_AT     = "UPDATED_AT"
+)
+
+// Node 节点接口
 type Node interface {
 }
 
-// 创建表节点
+// CreateTableNode 创建表节点
 type CreateTableNode struct {
-	TableName string        `xml:"tableName,attr"`
-	Remarks   string        `xml:"remarks,attr"`
-	Columns   []*ColumnNode `xml:"column"`
+	TableName  string           `xml:"tableName,attr"`
+	Remarks    string           `xml:"remarks,attr"`
+	Columns    []*ColumnNode    `xml:"column"`
+	Attributes []*AttributeNode `xml:"attribute"`
 }
 
-// 列节点
+type AttributeNode struct {
+	Dialect string `xml:"dialect,attr"`
+	Name    string `xml:"name,attr"`
+	Value   string `xml:"value,attr"`
+}
+
+// ColumnNode 列节点
 type ColumnNode struct {
 	ColumnName         string               `xml:"columnName,attr"`
 	DataType           string               `xml:"dataType,attr"`
@@ -45,13 +63,14 @@ type ColumnNode struct {
 	Nullable           bool                 `xml:"nullable,attr"`
 	Unique             bool                 `xml:"unique,attr"`
 	PrimaryKey         bool                 `xml:"primaryKey,attr"`
+	KeyName            string               `xml:"keyName,attr"`
 	DefaultValue       string               `xml:"defaultValue,attr"`
 	DefaultOriginValue string               `xml:"defaultOriginValue,attr"`
 	Remarks            string               `xml:"remarks,attr"`
 	Dialects           []*ColumnDialectNode `xml:"columnDialect"`
 }
 
-// 列方言节点
+// ColumnDialectNode 列方言节点
 type ColumnDialectNode struct {
 	Dialect            string `xml:"dialect,attr"`
 	DataType           string `xml:"dataType,attr"`
@@ -59,7 +78,7 @@ type ColumnDialectNode struct {
 	DefaultOriginValue string `xml:"defaultOriginValue,attr"`
 }
 
-// 创建索引节点
+// CreateIndexNode 创建索引节点
 type CreateIndexNode struct {
 	TableName string             `xml:"tableName,attr"`
 	IndexName string             `xml:"indexName,attr"`
@@ -67,119 +86,172 @@ type CreateIndexNode struct {
 	Columns   []*IndexColumnNode `xml:"indexColumn"`
 }
 
-// 索引列节点
+// IndexColumnNode 索引列节点
 type IndexColumnNode struct {
 	ColumnName string `xml:"columnName,attr"`
 }
 
-// 创建主键节点
+// CreatePrimaryKeyNode 创建主键节点
 type CreatePrimaryKeyNode struct {
 	TableName string           `xml:"tableName,attr"`
 	KeyName   string           `xml:"keyName,attr"`
 	Column    *IndexColumnNode `xml:"indexColumn"`
 }
 
-// 删除表节点
+// DropTableNode 删除表节点
 type DropTableNode struct {
 	TableName string `xml:"tableName,attr"`
 }
 
-// 删除索引节点
+// DropIndexNode 删除索引节点
 type DropIndexNode struct {
 	TableName string `xml:"tableName,attr"`
 	IndexName string `xml:"indexName,attr"`
 }
 
-// 添加列节点
+// AddColumnNode 添加列节点
 type AddColumnNode struct {
 	TableName string        `xml:"tableName,attr"`
 	Columns   []*ColumnNode `xml:"column"`
 }
 
-// 修改列节点
+// RenameColumnNode 重命名列节点
+type RenameColumnNode struct {
+	TableName     string `xml:"tableName,attr"`
+	ColumnName    string `xml:"columnName,attr"`
+	NewColumnName string `xml:"newColumnName,attr"`
+}
+
+// AlterColumnNode 修改列节点
 type AlterColumnNode struct {
 	TableName  string      `xml:"tableName,attr"`
 	ColumnName string      `xml:"columnName,attr"`
 	Column     *ColumnNode `xml:"column"`
 }
 
-// 删除列节点
+// DropColumnNode 删除列节点
 type DropColumnNode struct {
 	TableName  string `xml:"tableName,attr"`
 	ColumnName string `xml:"columnName,attr"`
 }
 
-// 删除主键节点
+// DropPrimaryKeyNode 删除主键节点
 type DropPrimaryKeyNode struct {
 	TableName string `xml:"tableName,attr"`
 }
 
-// 重命名表节点
+// RenameTableNode 重命名表节点
 type RenameTableNode struct {
 	TableName    string `xml:"tableName,attr"`
 	NewTableName string `xml:"newTableName,attr"`
 }
 
-// 重命名表说明节点
+// AlterTableRemarksNode 重命名表说明节点
 type AlterTableRemarksNode struct {
 	TableName string `xml:"tableName,attr"`
 	Remarks   string `xml:"remarks,attr"`
 }
 
-// SQL脚本节点
+// ScriptNode SQL脚本节点
 type ScriptNode struct {
 	Dialect string `xml:"dialect,attr"`
 	Value   string `xml:",chardata"`
 }
 
-// SQL版本合并接口
+// Migratory SQL版本合并接口
 type Migratory interface {
-	// 合并器名称
+	// Name 合并器名称
 	Name() string
-	// 初始化记录变更记录表
+	// InitChangeLogTable 初始化记录变更记录表
 	InitChangeLogTable(context.Context, Driver, string) error
-	// 最后一次版本信息
+	// LastVersion 最后一次版本信息
 	LastVersion(context.Context, Driver, string) (*version.Version, error)
-	// 创建一条新的表更记录
+	// NewChangeLog 创建一条新的表更记录
 	NewChangeLog(context.Context, Driver, string, string) error
-	// 完成一条表更记录
+	// CompleteChangeLog 完成一条表更记录
 	CompleteChangeLog(context.Context, Driver, string, string) error
-	// 创建表
+	// CreateTable 创建表
 	CreateTable(context.Context, Driver, *CreateTableNode) error
-	// 创建索引
+	// CreateIndex 创建索引
 	CreateIndex(context.Context, Driver, *CreateIndexNode) error
-	// 创建主键
+	// CreatePrimaryKey 创建主键
 	CreatePrimaryKey(context.Context, Driver, *CreatePrimaryKeyNode) error
-	// 删除表
+	// DropTable 删除表
 	DropTable(context.Context, Driver, *DropTableNode) error
-	// 删除索引
+	// DropIndex 删除索引
 	DropIndex(context.Context, Driver, *DropIndexNode) error
-	// 添加列
+	// AddColumn 添加列
 	AddColumn(context.Context, Driver, *AddColumnNode) error
-	// 修改列
+	// RenameColumn 重命名列
+	RenameColumn(context.Context, Driver, *RenameColumnNode) error
+	// AlterColumn 修改列
 	AlterColumn(context.Context, Driver, *AlterColumnNode) error
-	// 删除列
+	// DropColumn 删除列
 	DropColumn(context.Context, Driver, *DropColumnNode) error
-	// 删除主键
+	// DropPrimaryKey 删除主键
 	DropPrimaryKey(context.Context, Driver, *DropPrimaryKeyNode) error
-	// 重命名表
+	// RenameTable 重命名表
 	RenameTable(context.Context, Driver, *RenameTableNode) error
-	// 修改表说明
+	// AlterTableRemarks 修改表说明
 	AlterTableRemarks(context.Context, Driver, *AlterTableRemarksNode) error
-	// 执行自定义SQL脚本
+	// Script 执行自定义SQL脚本
 	Script(context.Context, Driver, *ScriptNode) error
 }
 
 type DefaultMigratory struct {
-	name string
+	name           string
+	showTablesSql  string
+	dataTypeMapper map[string]string
 }
 
 func (m *DefaultMigratory) Name() string {
 	return m.name
 }
 
+// InitChangeLogTable 初始化变更记录表
+func (m *DefaultMigratory) InitChangeLogTable(ctx context.Context, driver Driver, changeTableName string) error {
+	if m.showTablesSql == "" {
+		return errors.New("showTablesSql must not be empty")
+	}
+	rows, err := driver.Query(ctx, m.showTablesSql)
+	exists := false
+	if exists, err = m.ExistsTable(changeTableName, rows, err); err != nil || exists {
+		return err
+	}
+	return m.CreateChangeTable(ctx, driver, changeTableName)
+}
+
+func (m *DefaultMigratory) ExistsTable(changeTableName string, rows Rows, err error) (bool, error) {
+	if err != nil {
+		return false, err
+	}
+	changeTableName = strings.ToLower(changeTableName)
+	for rows.Next() {
+		var tableName string
+		if err = rows.Scan(&tableName); err != nil {
+			return false, err
+		}
+		if changeTableName == strings.ToLower(tableName) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *DefaultMigratory) CreateChangeTable(ctx context.Context, driver Driver, changeTableName string) error {
+	sql := fmt.Sprintf("CREATE TABLE %s(%s %s PRIMARY KEY, %s %s(255) NOT NULL, %s %s DEFAULT 0 NOT NULL, %s %s, %s %s)",
+		changeTableName,
+		COLUMN_ID, m.dataTypeMapper[Bigint],
+		COLUMN_CHANGE_VERSION, m.dataTypeMapper[Varchar],
+		COLUMN_IS_SUCCESS, m.dataTypeMapper[Boolean],
+		COLUMN_CREATED_AT, m.dataTypeMapper[Timestamp],
+		COLUMN_UPDATED_AT, m.dataTypeMapper[Timestamp],
+	)
+	return driver.Execute(ctx, sql)
+}
+
 func (m *DefaultMigratory) LastVersion(ctx context.Context, driver Driver, changeTableName string) (*version.Version, error) {
-	rows, err := driver.Query(ctx, "SELECT change_version FROM "+changeTableName+" WHERE is_success = 1")
+	rows, err := driver.Query(ctx, fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1", COLUMN_CHANGE_VERSION, changeTableName, COLUMN_IS_SUCCESS))
 	if err != nil {
 		return nil, err
 	}
@@ -204,11 +276,210 @@ func (m *DefaultMigratory) LastVersion(ctx context.Context, driver Driver, chang
 }
 
 func (m *DefaultMigratory) NewChangeLog(ctx context.Context, driver Driver, changeTableName, version string) error {
-	return driver.Execute(ctx, "INSERT INTO "+changeTableName+"(change_version, is_success, created_at, updated_at) VALUES(?, 0, ?, ?)", version, time.Now(), time.Now())
+	return driver.Execute(ctx, fmt.Sprintf("INSERT INTO %s(%s, %s, %s, %s) VALUES(?, 0, ?, ?)",
+		changeTableName, COLUMN_CHANGE_VERSION, COLUMN_IS_SUCCESS, COLUMN_CREATED_AT, COLUMN_UPDATED_AT), version, time.Now(), time.Now())
 }
 
 func (m *DefaultMigratory) CompleteChangeLog(ctx context.Context, driver Driver, changeTableName, version string) error {
-	return driver.Execute(ctx, "UPDATE "+changeTableName+" SET is_success = 1, updated_at = ? WHERE change_version = ? AND is_success = 0", time.Now(), version)
+	return driver.Execute(ctx, fmt.Sprintf("UPDATE %s SET %s = 1, %s = ? WHERE %s = ? AND %s = 0",
+		changeTableName, COLUMN_IS_SUCCESS, COLUMN_UPDATED_AT, COLUMN_CHANGE_VERSION, COLUMN_IS_SUCCESS), time.Now(), version)
+}
+
+func (m *DefaultMigratory) CreateTable(ctx context.Context, driver Driver, node *CreateTableNode) error {
+	var builder strings.Builder
+	builder.WriteString("CREATE TABLE ")
+	builder.WriteString(node.TableName)
+	builder.WriteString("\n(\n")
+	size := len(node.Columns)
+	var pkColumn *ColumnNode
+	for index, column := range node.Columns {
+		builder.WriteString("  ")
+		if pk := m.CreateTableColumn(column, &builder); pk {
+			if pkColumn != nil {
+				return errors.New("multiple primary key columns are not allowed to be defined")
+			}
+			if column.KeyName == "" {
+				builder.WriteString(" PRIMARY KEY")
+			}
+			pkColumn = column
+		}
+		if index < size-1 {
+			builder.WriteString(",\n")
+		}
+	}
+	if pkColumn != nil && pkColumn.KeyName != "" {
+		builder.WriteString(",\n  CONSTRAINT ")
+		builder.WriteString(pkColumn.KeyName)
+		builder.WriteString(" PRIMARY KEY (")
+		builder.WriteString(pkColumn.ColumnName)
+		builder.WriteString(")")
+	}
+	builder.WriteString("\n)")
+	if err := driver.Execute(ctx, builder.String()); err != nil {
+		return err
+	}
+
+	if node.Remarks != "" {
+		if err := driver.Execute(ctx, fmt.Sprintf("COMMENT ON TABLE %s IS '%s'",
+			node.TableName, strings.ReplaceAll(node.Remarks, "'", "''"))); err != nil {
+			return err
+		}
+	}
+	for _, column := range node.Columns {
+		if column.Remarks != "" {
+			if err := driver.Execute(ctx, fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s'",
+				node.TableName, column.ColumnName, strings.ReplaceAll(column.Remarks, "'", "''"))); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (m *DefaultMigratory) CreateTableColumn(node *ColumnNode, builder *strings.Builder) bool {
+	var dialectNode *ColumnDialectNode
+
+	// 查找方言
+	for _, dialect := range node.Dialects {
+		if dialect.Dialect == m.Name() {
+			dialectNode = dialect
+			break
+		}
+	}
+	builder.WriteString(node.ColumnName)
+	builder.WriteString(" ")
+	var defaultValue string
+	if dialectNode != nil {
+		builder.WriteString(dialectNode.DataType)
+		if dialectNode.DefaultOriginValue != "" {
+			defaultValue = dialectNode.DefaultOriginValue
+		} else if dialectNode.DefaultValue != "" {
+			defaultValue = fmt.Sprintf("'%s'", strings.ReplaceAll(dialectNode.DefaultValue, "'", "''"))
+		}
+	} else {
+		builder.WriteString(columnType(node.DataType, m.dataTypeMapper[node.DataType], node.MaxLength, node.NumericScale))
+		if node.DefaultOriginValue != "" {
+			defaultValue = node.DefaultOriginValue
+		} else if node.DefaultValue != "" {
+			defaultValue = fmt.Sprintf("'%s'", strings.ReplaceAll(node.DefaultValue, "'", "''"))
+		}
+	}
+	if node.PrimaryKey {
+		// builder.WriteString(" PRIMARY KEY")
+		return true
+	}
+	if defaultValue != "" {
+		builder.WriteString(" DEFAULT ")
+		builder.WriteString(defaultValue)
+	}
+	if node.Unique {
+		builder.WriteString(" UNIQUE")
+	}
+	if !node.Nullable {
+		builder.WriteString(" NOT NULL")
+	}
+	return false
+}
+
+func (m *DefaultMigratory) CreateIndex(ctx context.Context, driver Driver, node *CreateIndexNode) error {
+	var builder strings.Builder
+	builder.WriteString("CREATE")
+	if node.Unique {
+		builder.WriteString(" UNIQUE")
+	}
+	builder.WriteString(" INDEX ")
+	builder.WriteString(node.IndexName)
+	builder.WriteString(" ON ")
+	builder.WriteString(node.TableName)
+	builder.WriteString(" (")
+	var columns []string
+	for _, columnNode := range node.Columns {
+		columns = append(columns, columnNode.ColumnName)
+	}
+	builder.WriteString(strings.Join(columns, ", "))
+	builder.WriteString(")")
+	return driver.Execute(ctx, builder.String())
+}
+
+func (m *DefaultMigratory) CreatePrimaryKey(ctx context.Context, driver Driver, node *CreatePrimaryKeyNode) error {
+	var builder strings.Builder
+	builder.WriteString("ALTER TABLE ")
+	builder.WriteString(node.TableName)
+	builder.WriteString(" ADD CONSTRAINT ")
+	builder.WriteString(node.KeyName)
+	builder.WriteString(" PRIMARY KEY (")
+	builder.WriteString(node.Column.ColumnName)
+	builder.WriteString(")")
+	return driver.Execute(ctx, builder.String())
+}
+
+func (m *DefaultMigratory) DropTable(ctx context.Context, driver Driver, node *DropTableNode) error {
+	return driver.Execute(ctx, fmt.Sprintf("DROP TABLE %s", node.TableName))
+}
+
+func (m *DefaultMigratory) DropIndex(ctx context.Context, driver Driver, node *DropIndexNode) error {
+	return driver.Execute(ctx, fmt.Sprintf("DROP INDEX %s", node.IndexName))
+}
+
+func (m *DefaultMigratory) AddColumn(ctx context.Context, driver Driver, node *AddColumnNode) error {
+	for _, column := range node.Columns {
+		var builder strings.Builder
+		builder.WriteString("ALTER TABLE ")
+		builder.WriteString(node.TableName)
+		builder.WriteString(" ADD ")
+		if pk := m.CreateTableColumn(column, &builder); pk {
+			return errors.New("adding columns is not allowed as a primary key")
+		}
+		if err := driver.Execute(ctx, builder.String()); err != nil {
+			return err
+		}
+		if column.Remarks != "" {
+			if err := driver.Execute(ctx, fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s'",
+				node.TableName, column.ColumnName, strings.ReplaceAll(column.Remarks, "'", "''"))); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (m *DefaultMigratory) RenameColumn(ctx context.Context, driver Driver, node *RenameColumnNode) error {
+	var builder strings.Builder
+	builder.WriteString("ALTER TABLE ")
+	builder.WriteString(node.TableName)
+	builder.WriteString(" RENAME COLUMN ")
+	builder.WriteString(node.ColumnName)
+	builder.WriteString(" TO ")
+	builder.WriteString(node.NewColumnName)
+	return driver.Execute(ctx, builder.String())
+}
+
+func (m *DefaultMigratory) AlterColumn(ctx context.Context, driver Driver, node *AlterColumnNode) error {
+	var builder strings.Builder
+	builder.WriteString("ALTER TABLE ")
+	builder.WriteString(node.TableName)
+	builder.WriteString(" MODIFY ")
+	node.Column.ColumnName = node.ColumnName
+	if pk := m.CreateTableColumn(node.Column, &builder); pk {
+		return errors.New("alter columns is not allowed as a primary key")
+	}
+	return driver.Execute(ctx, builder.String())
+}
+
+func (m *DefaultMigratory) DropColumn(ctx context.Context, driver Driver, node *DropColumnNode) error {
+	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", node.TableName, node.ColumnName))
+}
+
+func (m *DefaultMigratory) DropPrimaryKey(ctx context.Context, driver Driver, node *DropPrimaryKeyNode) error {
+	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", node.TableName))
+}
+
+func (m *DefaultMigratory) RenameTable(ctx context.Context, driver Driver, node *RenameTableNode) error {
+	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", node.TableName, node.NewTableName))
+}
+
+func (m *DefaultMigratory) AlterTableRemarks(ctx context.Context, driver Driver, node *AlterTableRemarksNode) error {
+	return driver.Execute(ctx, fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", node.TableName, strings.ReplaceAll(node.Remarks, "'", "''")))
 }
 
 func (m *DefaultMigratory) Script(ctx context.Context, driver Driver, node *ScriptNode) error {

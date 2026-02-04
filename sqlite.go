@@ -2,6 +2,7 @@ package dbfly
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -23,35 +24,27 @@ var SqliteDataTypeMappers = map[string]string{
 	Blob:      "BLOB",
 }
 
-// Sqlite合并实现
+// SqliteMigratory Sqlite合并实现
 type SqliteMigratory struct {
 	DefaultMigratory
 }
 
-// 创建一个Sqlite合并实现实例
+// NewSqliteMigratory 创建一个Sqlite合并实现实例
 func NewSqliteMigratory() Migratory {
+	showTablesSql := "SELECT name FROM sqlite_master WHERE type = 'table'"
 	return &SqliteMigratory{
-		DefaultMigratory{name: "sqlite"},
+		DefaultMigratory{name: "sqlite", showTablesSql: showTablesSql, dataTypeMapper: SqliteDataTypeMappers},
 	}
 }
 
-// 初始化变更记录表
+// InitChangeLogTable 初始化变更记录表
 func (m *SqliteMigratory) InitChangeLogTable(ctx context.Context, driver Driver, changeTableName string) error {
 	rows, err := driver.Query(ctx, "SELECT name FROM sqlite_master WHERE type = 'table'")
-	if err != nil {
+	exists := false
+	if exists, err = m.ExistsTable(changeTableName, rows, err); err != nil || exists {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var tableName string
-		if err := rows.Scan(&tableName); err != nil {
-			return err
-		}
-		if changeTableName == strings.ToLower(tableName) {
-			return nil
-		}
-	}
-	return driver.Execute(ctx, "CREATE TABLE "+changeTableName+"(id INTEGER PRIMARY KEY AUTOINCREMENT, change_version VARCHAR(255) NOT NULL, is_success TINYINT DEFAULT 0 NOT NULL, created_at DATETIME, updated_at DATETIME)")
+	return m.CreateChangeTable(ctx, driver, changeTableName)
 }
 
 func (m *SqliteMigratory) CreateTable(ctx context.Context, driver Driver, node *CreateTableNode) error {
@@ -60,87 +53,41 @@ func (m *SqliteMigratory) CreateTable(ctx context.Context, driver Driver, node *
 	builder.WriteString(node.TableName)
 	builder.WriteString("\n(\n")
 	size := len(node.Columns)
+	var pkColumn *ColumnNode
 	for index, column := range node.Columns {
 		builder.WriteString("  ")
-		m.createTableColumn(column, &builder)
+		if pk := m.CreateTableColumn(column, &builder); pk {
+			if pkColumn != nil {
+				return errors.New("multiple primary key columns are not allowed to be defined")
+			}
+			if column.KeyName == "" {
+				builder.WriteString(" PRIMARY KEY")
+			}
+			pkColumn = column
+		}
 		if index < size-1 {
 			builder.WriteString(",\n")
 		}
 	}
+	if pkColumn != nil && pkColumn.KeyName != "" {
+		builder.WriteString(",\n  CONSTRAINT ")
+		builder.WriteString(pkColumn.KeyName)
+		builder.WriteString(" PRIMARY KEY (")
+		builder.WriteString(pkColumn.ColumnName)
+		builder.WriteString(")")
+	}
 	builder.WriteString("\n)")
-	return driver.Execute(ctx, builder.String())
-}
-
-func (m *SqliteMigratory) createTableColumn(node *ColumnNode, builder *strings.Builder) {
-	var dialectNode *ColumnDialectNode
-	// 查找方言
-	for _, dialect := range node.Dialects {
-		if dialect.Dialect == m.Name() {
-			dialectNode = dialect
-			break
-		}
+	if err := driver.Execute(ctx, builder.String()); err != nil {
+		return err
 	}
-	builder.WriteString(node.ColumnName)
-	builder.WriteString(" ")
-	var defaultValue string
-	if dialectNode != nil {
-		builder.WriteString(dialectNode.DataType)
-		if dialectNode.DefaultOriginValue != "" {
-			defaultValue = dialectNode.DefaultOriginValue
-		} else if dialectNode.DefaultValue != "" {
-			defaultValue = fmt.Sprintf("'%s'", strings.ReplaceAll(dialectNode.DefaultValue, "'", "''"))
-		}
-	} else {
-		builder.WriteString(columnType(node.DataType, SqliteDataTypeMappers[node.DataType], node.MaxLength, node.NumericScale))
-		if node.DefaultOriginValue != "" {
-			defaultValue = node.DefaultOriginValue
-		} else if node.DefaultValue != "" {
-			defaultValue = fmt.Sprintf("'%s'", strings.ReplaceAll(node.DefaultValue, "'", "''"))
-		}
-	}
-	if node.PrimaryKey {
-		builder.WriteString(" PRIMARY KEY")
-	} else {
-		if defaultValue != "" {
-			builder.WriteString(" DEFAULT ")
-			builder.WriteString(defaultValue)
-		}
-		if node.Unique {
-			builder.WriteString(" UNIQUE")
-		}
-		if !node.Nullable {
-			builder.WriteString(" NOT NULL")
-		}
-	}
-}
-
-func (m *SqliteMigratory) CreateIndex(ctx context.Context, driver Driver, node *CreateIndexNode) error {
-	var builder strings.Builder
-	builder.WriteString("CREATE")
-	if node.Unique {
-		builder.WriteString(" UNIQUE")
-	}
-	builder.WriteString(" INDEX ")
-	builder.WriteString(node.IndexName)
-	builder.WriteString(" ON ")
-	builder.WriteString(node.TableName)
-	builder.WriteString(" (")
-	var columns []string
-	for _, columnNode := range node.Columns {
-		columns = append(columns, columnNode.ColumnName)
-	}
-	builder.WriteString(strings.Join(columns, ", "))
-	builder.WriteString(")")
-	return driver.Execute(ctx, builder.String())
+	return nil
 }
 
 func (m *SqliteMigratory) CreatePrimaryKey(ctx context.Context, driver Driver, node *CreatePrimaryKeyNode) error {
-	// 查询表结构
 	info, err := m.tableStruct(ctx, driver, node.TableName)
 	if err != nil {
 		return err
 	}
-	pkColumnName := strings.ToLower(node.Column.ColumnName)
 	tmpTableName := node.TableName + "_dbfly"
 	var builder strings.Builder
 	builder.WriteString("CREATE TABLE ")
@@ -161,25 +108,38 @@ func (m *SqliteMigratory) CreatePrimaryKey(ctx context.Context, driver Driver, n
 		if column.Notnull {
 			builder.WriteString(" NOT NULL")
 		}
-		if pkColumnName == strings.ToLower(column.Name) {
-			builder.WriteString("CONSTRAINT ")
-			builder.WriteString(node.KeyName)
-			builder.WriteString(" PRIMARY KEY")
-		}
 		if index < size-1 {
 			builder.WriteString(",\n")
 		}
 	}
+	builder.WriteString(",\n  CONSTRAINT ")
+	builder.WriteString(node.KeyName)
+	builder.WriteString(" PRIMARY KEY (")
+	builder.WriteString(node.Column.ColumnName)
+	builder.WriteString(")")
 	builder.WriteString("\n)")
-	return m.copyTable(ctx, driver, builder.String(), columnNames, tmpTableName, node.TableName, info.indexs)
+	return m.copyTable(ctx, driver, builder.String(), columnNames, tmpTableName, node.TableName, info.indexs, nil)
 }
 
-func (m *SqliteMigratory) copyTable(ctx context.Context, driver Driver, createSql string, columnNames []string, tmpTableName, tableName string, indexSqls []string) error {
+func (m *SqliteMigratory) copyTable(ctx context.Context, driver Driver, createSql string, columnNames []string, tmpTableName, tableName string, indexSqls []string, nameMapper map[string]string) error {
 	if err := driver.Execute(ctx, createSql); err != nil {
 		return nil
 	}
 	columnNameStr := strings.Join(columnNames, ", ")
-	if err := driver.Execute(ctx, fmt.Sprintf("INSERT INTO %s(%s) SELECT %s FROM %s", tmpTableName, columnNameStr, columnNameStr, tableName)); err != nil {
+	var newColumnNames []string
+	if nameMapper == nil || len(nameMapper) == 0 {
+		newColumnNames = columnNames
+	} else {
+		for _, name := range columnNames {
+			if value, ok := nameMapper[name]; !ok {
+				newColumnNames = append(newColumnNames, value)
+				continue
+			}
+			newColumnNames = append(newColumnNames, name)
+		}
+	}
+	newColumnNameStr := strings.Join(newColumnNames, ", ")
+	if err := driver.Execute(ctx, fmt.Sprintf("INSERT INTO %s(%s) SELECT %s FROM %s", tmpTableName, newColumnNameStr, columnNameStr, tableName)); err != nil {
 		return nil
 	}
 	if err := driver.Execute(ctx, fmt.Sprintf("DROP TABLE %s", tableName)); err != nil {
@@ -234,7 +194,7 @@ func (m *SqliteMigratory) parseColumns(ctx context.Context, driver Driver, table
 	var columns []*sqliteColumnStruct
 	for rows.Next() {
 		var column sqliteColumnStruct
-		if err := rows.Scan(&column.Cid, &column.Name, &column.Type, &column.Notnull, &column.DfltValue, &column.Pk); err != nil {
+		if err = rows.Scan(&column.Cid, &column.Name, &column.Type, &column.Notnull, &column.DfltValue, &column.Pk); err != nil {
 			return nil, err
 		}
 		columns = append(columns, &column)
@@ -251,20 +211,12 @@ func (m *SqliteMigratory) parseIndexSqls(ctx context.Context, driver Driver, tab
 	var sqls []string
 	for rows.Next() {
 		var sqlStr string
-		if err := rows.Scan(&sqlStr); err != nil {
+		if err = rows.Scan(&sqlStr); err != nil {
 			return nil, err
 		}
 		sqls = append(sqls, sqlStr)
 	}
 	return sqls, nil
-}
-
-func (m *SqliteMigratory) DropTable(ctx context.Context, driver Driver, node *DropTableNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("DROP TABLE %s", node.TableName))
-}
-
-func (m *SqliteMigratory) DropIndex(ctx context.Context, driver Driver, node *DropIndexNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("DROP INDEX %s", node.IndexName))
 }
 
 func (m *SqliteMigratory) AddColumn(ctx context.Context, driver Driver, node *AddColumnNode) error {
@@ -273,7 +225,9 @@ func (m *SqliteMigratory) AddColumn(ctx context.Context, driver Driver, node *Ad
 		builder.WriteString("ALTER TABLE ")
 		builder.WriteString(node.TableName)
 		builder.WriteString(" ADD ")
-		m.createTableColumn(column, &builder)
+		if pk := m.CreateTableColumn(column, &builder); pk {
+			return errors.New("adding columns is not allowed as a primary key")
+		}
 		if err := driver.Execute(ctx, builder.String()); err != nil {
 			return err
 		}
@@ -281,12 +235,53 @@ func (m *SqliteMigratory) AddColumn(ctx context.Context, driver Driver, node *Ad
 	return nil
 }
 
+func (m *SqliteMigratory) RenameColumn(ctx context.Context, driver Driver, node *RenameColumnNode) error {
+	info, err := m.tableStruct(ctx, driver, node.TableName)
+	if err != nil {
+		return err
+	}
+	tmpTableName := node.TableName + "_dbfly"
+	var builder strings.Builder
+	builder.WriteString("CREATE TABLE ")
+	builder.WriteString(tmpTableName)
+	builder.WriteString("\n(\n")
+	size := len(info.columns)
+	var columnNames []string
+	oldName := strings.ToLower(node.ColumnName)
+	newName := node.NewColumnName
+	nameMapper := map[string]string{}
+	for index, column := range info.columns {
+		name := column.Name
+		columnNames = append(columnNames, column.Name)
+		if oldName == strings.ToLower(column.Name) {
+			nameMapper[column.Name] = newName
+			name = newName
+		}
+		builder.WriteString("  ")
+		builder.WriteString(name)
+		builder.WriteString(" ")
+		builder.WriteString(column.Type)
+		if column.DfltValue != "" {
+			builder.WriteString(" DEFAULT ")
+			builder.WriteString(column.DfltValue)
+		}
+		if column.Notnull {
+			builder.WriteString(" NOT NULL")
+		}
+		if index < size-1 {
+			builder.WriteString(",\n")
+		}
+	}
+	builder.WriteString("\n)")
+	return m.copyTable(ctx, driver, builder.String(), columnNames, tmpTableName, node.TableName, info.indexs, nameMapper)
+}
+
 func (m *SqliteMigratory) AlterColumn(ctx context.Context, driver Driver, node *AlterColumnNode) error {
 	info, err := m.tableStruct(ctx, driver, node.TableName)
 	if err != nil {
 		return err
 	}
-	columnName := strings.ToLower(node.ColumnName)
+	node.Column.ColumnName = node.ColumnName
 	tmpTableName := node.TableName + "_dbfly"
 	var builder strings.Builder
 	builder.WriteString("CREATE TABLE ")
@@ -294,54 +289,65 @@ func (m *SqliteMigratory) AlterColumn(ctx context.Context, driver Driver, node *
 	builder.WriteString("\n(\n")
 	size := len(info.columns)
 	var columnNames []string
+	columnName := strings.ToLower(node.ColumnName)
 	for index, column := range info.columns {
 		columnNames = append(columnNames, column.Name)
 		builder.WriteString("  ")
 		if columnName == strings.ToLower(column.Name) {
-			m.createTableColumn(node.Column, &builder)
-		} else {
-			builder.WriteString(column.Name)
-			builder.WriteString(" ")
-			builder.WriteString(column.Type)
-			if column.DfltValue != "" {
-				builder.WriteString(" DEFAULT ")
-				builder.WriteString(column.DfltValue)
+			if pk := m.CreateTableColumn(node.Column, &builder); pk {
+				return errors.New("alter columns is not allowed as a primary key")
 			}
-			if column.Notnull {
-				builder.WriteString(" NOT NULL")
-			}
+			continue
+		}
+		builder.WriteString(column.Name)
+		builder.WriteString(" ")
+		builder.WriteString(column.Type)
+		if column.Pk {
+			builder.WriteString(" PRIMARY KEY")
+		}
+		if column.DfltValue != "" {
+			builder.WriteString(" DEFAULT ")
+			builder.WriteString(column.DfltValue)
+		}
+		if column.Notnull {
+			builder.WriteString(" NOT NULL")
 		}
 		if index < size-1 {
 			builder.WriteString(",\n")
 		}
 	}
 	builder.WriteString("\n)")
-	return m.copyTable(ctx, driver, builder.String(), columnNames, tmpTableName, node.TableName, info.indexs)
+	return m.copyTable(ctx, driver, builder.String(), columnNames, tmpTableName, node.TableName, info.indexs, nil)
 }
 
 func (m *SqliteMigratory) DropColumn(ctx context.Context, driver Driver, node *DropColumnNode) error {
-	// 查询表结构
 	info, err := m.tableStruct(ctx, driver, node.TableName)
 	if err != nil {
 		return err
 	}
-	columnName := strings.ToLower(node.ColumnName)
 	tmpTableName := node.TableName + "_dbfly"
 	var builder strings.Builder
 	builder.WriteString("CREATE TABLE ")
 	builder.WriteString(tmpTableName)
 	builder.WriteString("\n(\n")
-	size := len(info.columns)
 	var columnNames []string
-	for index, column := range info.columns {
-		if columnName == strings.ToLower(column.Name) {
+	dropColumnName := strings.ToLower(node.ColumnName)
+	first := true
+	for _, column := range info.columns {
+		if dropColumnName == strings.ToLower(column.Name) {
 			continue
 		}
+		if !first {
+			builder.WriteString(",\n  ")
+		}
+		first = false
 		columnNames = append(columnNames, column.Name)
-		builder.WriteString("  ")
 		builder.WriteString(column.Name)
 		builder.WriteString(" ")
 		builder.WriteString(column.Type)
+		if column.Pk {
+			builder.WriteString(" PRIMARY KEY")
+		}
 		if column.DfltValue != "" {
 			builder.WriteString(" DEFAULT ")
 			builder.WriteString(column.DfltValue)
@@ -349,16 +355,12 @@ func (m *SqliteMigratory) DropColumn(ctx context.Context, driver Driver, node *D
 		if column.Notnull {
 			builder.WriteString(" NOT NULL")
 		}
-		if index < size-1 {
-			builder.WriteString(",\n")
-		}
 	}
 	builder.WriteString("\n)")
-	return m.copyTable(ctx, driver, builder.String(), columnNames, tmpTableName, node.TableName, info.indexs)
+	return m.copyTable(ctx, driver, builder.String(), columnNames, tmpTableName, node.TableName, info.indexs, nil)
 }
 
 func (m *SqliteMigratory) DropPrimaryKey(ctx context.Context, driver Driver, node *DropPrimaryKeyNode) error {
-	// 查询表结构
 	info, err := m.tableStruct(ctx, driver, node.TableName)
 	if err != nil {
 		return err
@@ -388,11 +390,7 @@ func (m *SqliteMigratory) DropPrimaryKey(ctx context.Context, driver Driver, nod
 		}
 	}
 	builder.WriteString("\n)")
-	return m.copyTable(ctx, driver, builder.String(), columnNames, tmpTableName, node.TableName, info.indexs)
-}
-
-func (m *SqliteMigratory) RenameTable(ctx context.Context, driver Driver, node *RenameTableNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("alter table %s rename to %s", node.TableName, node.NewTableName))
+	return m.copyTable(ctx, driver, builder.String(), columnNames, tmpTableName, node.TableName, info.indexs, nil)
 }
 
 func (m *SqliteMigratory) AlterTableRemarks(context.Context, Driver, *AlterTableRemarksNode) error {

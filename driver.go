@@ -7,22 +7,22 @@ import (
 	"io"
 )
 
-// 不同框架对数据库操作的驱动接口
+// Driver 不同框架对数据库操作的驱动接口
 type Driver interface {
-	// 执行SQL
+	// Execute 执行SQL
 	Execute(context.Context, string, ...interface{}) error
-	// 查询
+	// Query 查询
 	Query(context.Context, string, ...interface{}) (Rows, error)
 }
 
-// 查询结果
+// Rows 查询结果
 type Rows interface {
 	io.Closer
 	Next() bool
 	Scan(...interface{}) error
 }
 
-// 原生sql驱动实现
+// SqlDriver 原生sql驱动实现
 type SqlDriver struct {
 	db *sql.DB
 }

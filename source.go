@@ -18,15 +18,15 @@ type SourceInfo struct {
 	Script bool
 }
 
-// SQL源信息
+// Source SQL源信息
 type Source interface {
-	// 扫描源中包含的需要合并的文件信息
+	// Scan 扫描源中包含的需要合并的文件信息
 	Scan() ([]*SourceInfo, error)
-	// 读取源中指定uid的文件内容
+	// Read 读取源中指定uid的文件内容
 	Read(string) ([]byte, error)
 }
 
-// 嵌入文件系统源实现
+// EmbedFSSource 嵌入文件系统源实现
 type EmbedFSSource struct {
 	Fs    embed.FS
 	Paths []string
@@ -76,7 +76,7 @@ func (s *EmbedFSSource) Read(uid string) ([]byte, error) {
 	return s.Fs.ReadFile(uid)
 }
 
-// 文件系统源实现
+// FSSource 文件系统源实现
 type FSSource struct {
 	Paths []string
 }
@@ -125,7 +125,7 @@ func (s *FSSource) Read(uid string) ([]byte, error) {
 	return os.ReadFile(uid)
 }
 
-// 嵌入源实现
+// EmbedSource 嵌入源实现
 type EmbedSource struct {
 	Sources map[string]*EmbedSourceInfo
 }

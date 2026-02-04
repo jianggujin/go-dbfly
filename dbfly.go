@@ -10,7 +10,7 @@ import (
 )
 
 // 默认用于记录版本变化的表名
-const changeTableName = "dbfly_change_log"
+const changeTableName = "DBFLY_CHANGE_LOG"
 
 type Dbfly struct {
 	migratory       Migratory
@@ -27,12 +27,12 @@ func NewDbfly(migratory Migratory, driver Driver, source Source) *Dbfly {
 	}
 }
 
-// 设置记录变更表名
+// SetChangeTableName 设置记录变更表名
 func (f *Dbfly) SetChangeTableName(changeTableName string) {
 	f.changeTableName = changeTableName
 }
 
-// 合并操作
+// Migrate 合并操作
 func (f *Dbfly) Migrate() error {
 	return f.MigrateContext(context.Background())
 }
@@ -57,7 +57,7 @@ func (f *Dbfly) MigrateContext(ctx context.Context) error {
 
 	// 2 查询历史执行版本
 	// 2.1 初始化变更记录表
-	if err := f.migratory.InitChangeLogTable(ctx, f.driver, f.changeTableName); err != nil {
+	if err = f.migratory.InitChangeLogTable(ctx, f.driver, f.changeTableName); err != nil {
 		return err
 	}
 	// 2.2 查询历史执行版本
@@ -76,7 +76,7 @@ func (f *Dbfly) MigrateContext(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := f.migrateNodes(ctx, nodes, source.Version); err != nil {
+		if err = f.migrateNodes(ctx, nodes, source.Version); err != nil {
 			return err
 		}
 	}
@@ -104,6 +104,8 @@ func (f *Dbfly) migrateNodes(ctx context.Context, nodes []Node, version *version
 			err = migratory.DropIndex(ctx, driver, n)
 		case *AddColumnNode:
 			err = migratory.AddColumn(ctx, driver, n)
+		case *RenameColumnNode:
+			err = migratory.RenameColumn(ctx, driver, n)
 		case *AlterColumnNode:
 			err = migratory.AlterColumn(ctx, driver, n)
 		case *DropColumnNode:
@@ -170,6 +172,8 @@ func (f *Dbfly) parseContent(source *SourceInfo) ([]Node, error) {
 				node = &DropIndexNode{}
 			case "addColumn":
 				node = &AddColumnNode{}
+			case "renameColumn":
+				node = &RenameColumnNode{}
 			case "alterColumn":
 				node = &AlterColumnNode{}
 			case "dropColumn":
@@ -184,7 +188,7 @@ func (f *Dbfly) parseContent(source *SourceInfo) ([]Node, error) {
 				node = &ScriptNode{}
 			}
 			if node != nil {
-				if err := decoder.DecodeElement(node, &token); err != nil {
+				if err = decoder.DecodeElement(node, &token); err != nil {
 					return nil, err
 				}
 				nodes = append(nodes, node)
