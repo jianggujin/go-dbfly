@@ -378,6 +378,8 @@ type Migratory interface {
 	AlterTableRemarks(context.Context, Driver, *AlterTableRemarksNode) error
 	// Script 执行自定义SQL脚本
 	Script(context.Context, Driver, *ScriptNode) error
+	// SetQuotePolicy 设置引号策略
+	SetQuotePolicy(quotePolicy QuotePolicy)
 }
 ```
 

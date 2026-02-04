@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"fmt"
 	"github.com/hashicorp/go-version"
 	"io"
 	"sort"
@@ -37,7 +38,17 @@ func (f *Dbfly) Migrate() error {
 	return f.MigrateContext(context.Background())
 }
 
-func (f *Dbfly) MigrateContext(ctx context.Context) error {
+func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			retErr, ok := r.(error)
+			if !ok {
+				err = fmt.Errorf("panic: %v", r)
+			} else {
+				err = retErr
+			}
+		}
+	}()
 	if f.changeTableName == "" {
 		f.changeTableName = changeTableName
 	}

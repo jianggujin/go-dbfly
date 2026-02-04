@@ -6,7 +6,7 @@ import (
 )
 
 // 将SQL脚本拆分为单个最小执行单元脚本
-func splitSQLStatements(sqlText string) []string {
+func SplitSQLStatements(sqlText string) []string {
 	var statements []string
 	var currentStmt strings.Builder
 	var inString, inComment bool
@@ -76,7 +76,7 @@ func splitSQLStatements(sqlText string) []string {
 }
 
 // 针对字符串、DECIMAL等数据类型添加长度约束
-func columnType(dataType, columnType string, maxLength, numericScale int) string {
+func ColumnType(dataType, columnType string, maxLength, numericScale int) string {
 	switch dataType {
 	case Varchar, Char:
 		return fmt.Sprintf("%s(%d)", columnType, maxLength)
@@ -88,8 +88,4 @@ func columnType(dataType, columnType string, maxLength, numericScale int) string
 	default:
 		return columnType
 	}
-}
-
-func ReplaceRemarks(remarks string) string {
-	return strings.ReplaceAll(remarks, "'", "''")
 }

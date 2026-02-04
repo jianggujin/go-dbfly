@@ -10,6 +10,16 @@ import (
 	"time"
 )
 
+// QuotePolicy describes quote handle policy
+type QuotePolicy int
+
+// All QuotePolicies
+const (
+	QuotePolicyAlways QuotePolicy = iota
+	QuotePolicyNone
+	QuotePolicyReserved
+)
+
 const allDialect = "$all"
 const (
 	Varchar   = "VARCHAR"
@@ -196,12 +206,34 @@ type Migratory interface {
 	AlterTableRemarks(context.Context, Driver, *AlterTableRemarksNode) error
 	// Script 执行自定义SQL脚本
 	Script(context.Context, Driver, *ScriptNode) error
+	// SetQuotePolicy 设置引号策略
+	SetQuotePolicy(quotePolicy QuotePolicy)
 }
 
 type DefaultMigratory struct {
-	name           string
-	showTablesSql  string
-	dataTypeMapper map[string]string
+	name            string
+	showTablesSql   string
+	dataTypeMapper  map[string]string
+	quoter          *Quoter
+	overwriteQuoter *Quoter
+	reservedWords   map[string]struct{}
+}
+
+func NewDefaultMigratory(name, showTablesSql string, dataTypeMapper map[string]string, quoter *Quoter, reservedWords ...string) DefaultMigratory {
+	if dataTypeMapper == nil {
+		dataTypeMapper = make(map[string]string)
+	}
+	reservedWordsMap := map[string]struct{}{}
+	for _, reservedWord := range reservedWords {
+		reservedWordsMap[strings.ToUpper(reservedWord)] = struct{}{}
+	}
+	return DefaultMigratory{
+		name:           name,
+		showTablesSql:  showTablesSql,
+		dataTypeMapper: dataTypeMapper,
+		quoter:         quoter,
+		reservedWords:  reservedWordsMap,
+	}
 }
 
 func (m *DefaultMigratory) Name() string {
@@ -238,20 +270,40 @@ func (m *DefaultMigratory) ExistsTable(changeTableName string, rows Rows, err er
 	return false, nil
 }
 
+func (m *DefaultMigratory) quote(s string) string {
+	r, err := m.Quoter().Quote(s)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+func (m *DefaultMigratory) quoteTo(buf *strings.Builder, value string) {
+	if err := m.Quoter().QuoteTo(buf, value); err != nil {
+		panic(err)
+	}
+}
+
+func (m *DefaultMigratory) joinWrite(buf *strings.Builder, a []string) {
+	if err := m.Quoter().JoinWrite(buf, a, ", "); err != nil {
+		panic(err)
+	}
+}
+
 func (m *DefaultMigratory) CreateChangeTable(ctx context.Context, driver Driver, changeTableName string) error {
 	sql := fmt.Sprintf("CREATE TABLE %s(%s %s PRIMARY KEY, %s %s(255) NOT NULL, %s %s DEFAULT 0 NOT NULL, %s %s, %s %s)",
-		changeTableName,
-		COLUMN_ID, m.dataTypeMapper[Bigint],
-		COLUMN_CHANGE_VERSION, m.dataTypeMapper[Varchar],
-		COLUMN_IS_SUCCESS, m.dataTypeMapper[Boolean],
-		COLUMN_CREATED_AT, m.dataTypeMapper[Timestamp],
-		COLUMN_UPDATED_AT, m.dataTypeMapper[Timestamp],
+		m.quote(changeTableName),
+		m.quote(COLUMN_ID), m.dataTypeMapper[Bigint],
+		m.quote(COLUMN_CHANGE_VERSION), m.dataTypeMapper[Varchar],
+		m.quote(COLUMN_IS_SUCCESS), m.dataTypeMapper[Boolean],
+		m.quote(COLUMN_CREATED_AT), m.dataTypeMapper[Timestamp],
+		m.quote(COLUMN_UPDATED_AT), m.dataTypeMapper[Timestamp],
 	)
 	return driver.Execute(ctx, sql)
 }
 
 func (m *DefaultMigratory) LastVersion(ctx context.Context, driver Driver, changeTableName string) (*version.Version, error) {
-	rows, err := driver.Query(ctx, fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1", COLUMN_CHANGE_VERSION, changeTableName, COLUMN_IS_SUCCESS))
+	rows, err := driver.Query(ctx, fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1", m.quote(COLUMN_CHANGE_VERSION), m.quote(changeTableName), m.quote(COLUMN_IS_SUCCESS)))
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +311,7 @@ func (m *DefaultMigratory) LastVersion(ctx context.Context, driver Driver, chang
 	defer rows.Close()
 	for rows.Next() {
 		var changeVersion string
-		if err := rows.Scan(&changeVersion); err != nil {
+		if err = rows.Scan(&changeVersion); err != nil {
 			return nil, err
 		}
 		ver, err := version.NewVersion(changeVersion)
@@ -276,19 +328,23 @@ func (m *DefaultMigratory) LastVersion(ctx context.Context, driver Driver, chang
 }
 
 func (m *DefaultMigratory) NewChangeLog(ctx context.Context, driver Driver, changeTableName, version string) error {
-	return driver.Execute(ctx, fmt.Sprintf("INSERT INTO %s(%s, %s, %s, %s) VALUES(?, 0, ?, ?)",
-		changeTableName, COLUMN_CHANGE_VERSION, COLUMN_IS_SUCCESS, COLUMN_CREATED_AT, COLUMN_UPDATED_AT), version, time.Now(), time.Now())
+	return driver.Execute(ctx,
+		fmt.Sprintf("INSERT INTO %s(%s, %s, %s, %s) VALUES(?, 0, ?, ?)",
+			m.quote(changeTableName), m.quote(COLUMN_CHANGE_VERSION), m.quote(COLUMN_IS_SUCCESS), m.quote(COLUMN_CREATED_AT), m.quote(COLUMN_UPDATED_AT)),
+		version, time.Now(), time.Now())
 }
 
 func (m *DefaultMigratory) CompleteChangeLog(ctx context.Context, driver Driver, changeTableName, version string) error {
-	return driver.Execute(ctx, fmt.Sprintf("UPDATE %s SET %s = 1, %s = ? WHERE %s = ? AND %s = 0",
-		changeTableName, COLUMN_IS_SUCCESS, COLUMN_UPDATED_AT, COLUMN_CHANGE_VERSION, COLUMN_IS_SUCCESS), time.Now(), version)
+	return driver.Execute(ctx,
+		fmt.Sprintf("UPDATE %s SET %s = 1, %s = ? WHERE %s = ? AND %s = 0",
+			m.quote(changeTableName), m.quote(COLUMN_IS_SUCCESS), m.quote(COLUMN_UPDATED_AT), m.quote(COLUMN_CHANGE_VERSION), m.quote(COLUMN_IS_SUCCESS)),
+		time.Now(), version)
 }
 
 func (m *DefaultMigratory) CreateTable(ctx context.Context, driver Driver, node *CreateTableNode) error {
 	var builder strings.Builder
 	builder.WriteString("CREATE TABLE ")
-	builder.WriteString(node.TableName)
+	m.quoteTo(&builder, node.TableName)
 	builder.WriteString("\n(\n")
 	size := len(node.Columns)
 	var pkColumn *ColumnNode
@@ -309,9 +365,9 @@ func (m *DefaultMigratory) CreateTable(ctx context.Context, driver Driver, node 
 	}
 	if pkColumn != nil && pkColumn.KeyName != "" {
 		builder.WriteString(",\n  CONSTRAINT ")
-		builder.WriteString(pkColumn.KeyName)
+		m.quoteTo(&builder, pkColumn.KeyName)
 		builder.WriteString(" PRIMARY KEY (")
-		builder.WriteString(pkColumn.ColumnName)
+		m.quoteTo(&builder, pkColumn.ColumnName)
 		builder.WriteString(")")
 	}
 	builder.WriteString("\n)")
@@ -321,14 +377,14 @@ func (m *DefaultMigratory) CreateTable(ctx context.Context, driver Driver, node 
 
 	if node.Remarks != "" {
 		if err := driver.Execute(ctx, fmt.Sprintf("COMMENT ON TABLE %s IS '%s'",
-			node.TableName, strings.ReplaceAll(node.Remarks, "'", "''"))); err != nil {
+			m.quote(node.TableName), ReplaceRemarks(node.Remarks))); err != nil {
 			return err
 		}
 	}
 	for _, column := range node.Columns {
 		if column.Remarks != "" {
 			if err := driver.Execute(ctx, fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s'",
-				node.TableName, column.ColumnName, strings.ReplaceAll(column.Remarks, "'", "''"))); err != nil {
+				m.quote(node.TableName), m.quote(column.ColumnName), ReplaceRemarks(column.Remarks))); err != nil {
 				return err
 			}
 		}
@@ -346,7 +402,7 @@ func (m *DefaultMigratory) CreateTableColumn(node *ColumnNode, builder *strings.
 			break
 		}
 	}
-	builder.WriteString(node.ColumnName)
+	m.quoteTo(builder, node.ColumnName)
 	builder.WriteString(" ")
 	var defaultValue string
 	if dialectNode != nil {
@@ -357,7 +413,7 @@ func (m *DefaultMigratory) CreateTableColumn(node *ColumnNode, builder *strings.
 			defaultValue = fmt.Sprintf("'%s'", strings.ReplaceAll(dialectNode.DefaultValue, "'", "''"))
 		}
 	} else {
-		builder.WriteString(columnType(node.DataType, m.dataTypeMapper[node.DataType], node.MaxLength, node.NumericScale))
+		builder.WriteString(ColumnType(node.DataType, m.dataTypeMapper[node.DataType], node.MaxLength, node.NumericScale))
 		if node.DefaultOriginValue != "" {
 			defaultValue = node.DefaultOriginValue
 		} else if node.DefaultValue != "" {
@@ -388,15 +444,15 @@ func (m *DefaultMigratory) CreateIndex(ctx context.Context, driver Driver, node 
 		builder.WriteString(" UNIQUE")
 	}
 	builder.WriteString(" INDEX ")
-	builder.WriteString(node.IndexName)
+	m.quoteTo(&builder, node.IndexName)
 	builder.WriteString(" ON ")
-	builder.WriteString(node.TableName)
+	m.quoteTo(&builder, node.TableName)
 	builder.WriteString(" (")
 	var columns []string
 	for _, columnNode := range node.Columns {
 		columns = append(columns, columnNode.ColumnName)
 	}
-	builder.WriteString(strings.Join(columns, ", "))
+	m.joinWrite(&builder, columns)
 	builder.WriteString(")")
 	return driver.Execute(ctx, builder.String())
 }
@@ -404,28 +460,28 @@ func (m *DefaultMigratory) CreateIndex(ctx context.Context, driver Driver, node 
 func (m *DefaultMigratory) CreatePrimaryKey(ctx context.Context, driver Driver, node *CreatePrimaryKeyNode) error {
 	var builder strings.Builder
 	builder.WriteString("ALTER TABLE ")
-	builder.WriteString(node.TableName)
+	m.quoteTo(&builder, node.TableName)
 	builder.WriteString(" ADD CONSTRAINT ")
-	builder.WriteString(node.KeyName)
+	m.quoteTo(&builder, node.KeyName)
 	builder.WriteString(" PRIMARY KEY (")
-	builder.WriteString(node.Column.ColumnName)
+	m.quoteTo(&builder, node.Column.ColumnName)
 	builder.WriteString(")")
 	return driver.Execute(ctx, builder.String())
 }
 
 func (m *DefaultMigratory) DropTable(ctx context.Context, driver Driver, node *DropTableNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("DROP TABLE %s", node.TableName))
+	return driver.Execute(ctx, fmt.Sprintf("DROP TABLE %s", m.quote(node.TableName)))
 }
 
 func (m *DefaultMigratory) DropIndex(ctx context.Context, driver Driver, node *DropIndexNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("DROP INDEX %s", node.IndexName))
+	return driver.Execute(ctx, fmt.Sprintf("DROP INDEX %s", m.quote(node.IndexName)))
 }
 
 func (m *DefaultMigratory) AddColumn(ctx context.Context, driver Driver, node *AddColumnNode) error {
 	for _, column := range node.Columns {
 		var builder strings.Builder
 		builder.WriteString("ALTER TABLE ")
-		builder.WriteString(node.TableName)
+		m.quoteTo(&builder, node.TableName)
 		builder.WriteString(" ADD ")
 		if pk := m.CreateTableColumn(column, &builder); pk {
 			return errors.New("adding columns is not allowed as a primary key")
@@ -435,7 +491,7 @@ func (m *DefaultMigratory) AddColumn(ctx context.Context, driver Driver, node *A
 		}
 		if column.Remarks != "" {
 			if err := driver.Execute(ctx, fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s'",
-				node.TableName, column.ColumnName, strings.ReplaceAll(column.Remarks, "'", "''"))); err != nil {
+				m.quote(node.TableName), m.quote(column.ColumnName), ReplaceRemarks(column.Remarks))); err != nil {
 				return err
 			}
 		}
@@ -446,18 +502,18 @@ func (m *DefaultMigratory) AddColumn(ctx context.Context, driver Driver, node *A
 func (m *DefaultMigratory) RenameColumn(ctx context.Context, driver Driver, node *RenameColumnNode) error {
 	var builder strings.Builder
 	builder.WriteString("ALTER TABLE ")
-	builder.WriteString(node.TableName)
+	m.quoteTo(&builder, node.TableName)
 	builder.WriteString(" RENAME COLUMN ")
-	builder.WriteString(node.ColumnName)
+	m.quoteTo(&builder, node.ColumnName)
 	builder.WriteString(" TO ")
-	builder.WriteString(node.NewColumnName)
+	m.quoteTo(&builder, node.NewColumnName)
 	return driver.Execute(ctx, builder.String())
 }
 
 func (m *DefaultMigratory) AlterColumn(ctx context.Context, driver Driver, node *AlterColumnNode) error {
 	var builder strings.Builder
 	builder.WriteString("ALTER TABLE ")
-	builder.WriteString(node.TableName)
+	m.quoteTo(&builder, node.TableName)
 	builder.WriteString(" MODIFY ")
 	node.Column.ColumnName = node.ColumnName
 	if pk := m.CreateTableColumn(node.Column, &builder); pk {
@@ -467,29 +523,82 @@ func (m *DefaultMigratory) AlterColumn(ctx context.Context, driver Driver, node 
 }
 
 func (m *DefaultMigratory) DropColumn(ctx context.Context, driver Driver, node *DropColumnNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", node.TableName, node.ColumnName))
+	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", m.quote(node.TableName), m.quote(node.ColumnName)))
 }
 
 func (m *DefaultMigratory) DropPrimaryKey(ctx context.Context, driver Driver, node *DropPrimaryKeyNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", node.TableName))
+	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", m.quote(node.TableName)))
 }
 
 func (m *DefaultMigratory) RenameTable(ctx context.Context, driver Driver, node *RenameTableNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", node.TableName, node.NewTableName))
+	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", m.quote(node.TableName), m.quote(node.NewTableName)))
 }
 
 func (m *DefaultMigratory) AlterTableRemarks(ctx context.Context, driver Driver, node *AlterTableRemarksNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", node.TableName, strings.ReplaceAll(node.Remarks, "'", "''")))
+	return driver.Execute(ctx, fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", m.quote(node.TableName), ReplaceRemarks(node.Remarks)))
 }
 
 func (m *DefaultMigratory) Script(ctx context.Context, driver Driver, node *ScriptNode) error {
 	if node.Value == "" || (node.Dialect != m.name && node.Dialect != allDialect) {
 		return nil
 	}
-	for _, statement := range splitSQLStatements(node.Value) {
+	for _, statement := range SplitSQLStatements(node.Value) {
 		if err := driver.Execute(ctx, statement); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (m *DefaultMigratory) Quoter() *Quoter {
+	if m.overwriteQuoter != nil {
+		return m.overwriteQuoter
+	}
+	return m.defaultQuoter()
+}
+
+func (m *DefaultMigratory) defaultQuoter() *Quoter {
+	if m.quoter == nil {
+		return CommonQuoter
+	}
+	return m.quoter
+}
+
+func (m *DefaultMigratory) SetQuoter(quoter *Quoter) {
+	m.overwriteQuoter = quoter
+}
+
+func (m *DefaultMigratory) RegisterReservedWords(words ...string) {
+	for _, word := range words {
+		if word == "" {
+			continue
+		}
+		m.reservedWords[strings.ToUpper(word)] = struct{}{}
+	}
+}
+
+func (m *DefaultMigratory) RegisterDataType(name, value string) {
+	m.dataTypeMapper[name] = value
+}
+
+func (m *DefaultMigratory) ShowTablesSql() string {
+	return m.showTablesSql
+}
+
+func (m *DefaultMigratory) SetQuotePolicy(quotePolicy QuotePolicy) {
+	switch quotePolicy {
+	case QuotePolicyNone:
+		m.SetQuoter(m.defaultQuoter().Clone(WithIsReserved(AlwaysNoReserve)))
+	case QuotePolicyReserved:
+		m.SetQuoter(m.defaultQuoter().Clone(WithIsReserved(m.IsReserved)))
+	case QuotePolicyAlways:
+		fallthrough
+	default:
+		m.SetQuoter(m.defaultQuoter())
+	}
+}
+
+func (m *DefaultMigratory) IsReserved(name string) bool {
+	_, ok := m.reservedWords[strings.ToUpper(name)]
+	return ok
 }
