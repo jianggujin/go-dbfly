@@ -16,9 +16,12 @@
 
 ## 1.3 支持数据库
 
+- 达梦
 - MySQL
-- Sqlite
+- Oracle
 - PostgresSql
+- Sqlite
+- Vastbase
 
 # 第二部分 快速开始
 
@@ -337,41 +340,43 @@ type Driver interface {
 ### 3.3.2 自定义合并器
 
 ```go
-// SQL版本合并接口
+// Migratory SQL版本合并接口
 type Migratory interface {
-	// 合并器名称
+	// Name 合并器名称
 	Name() string
-	// 初始化记录变更记录表
+	// InitChangeLogTable 初始化记录变更记录表
 	InitChangeLogTable(context.Context, Driver, string) error
-	// 最后一次版本信息
+	// LastVersion 最后一次版本信息
 	LastVersion(context.Context, Driver, string) (*version.Version, error)
-	// 创建一条新的表更记录
+	// NewChangeLog 创建一条新的表更记录
 	NewChangeLog(context.Context, Driver, string, string) error
-	// 完成一条表更记录
+	// CompleteChangeLog 完成一条表更记录
 	CompleteChangeLog(context.Context, Driver, string, string) error
-	// 创建表
+	// CreateTable 创建表
 	CreateTable(context.Context, Driver, *CreateTableNode) error
-	// 创建索引
+	// CreateIndex 创建索引
 	CreateIndex(context.Context, Driver, *CreateIndexNode) error
-	// 创建主键
+	// CreatePrimaryKey 创建主键
 	CreatePrimaryKey(context.Context, Driver, *CreatePrimaryKeyNode) error
-	// 删除表
+	// DropTable 删除表
 	DropTable(context.Context, Driver, *DropTableNode) error
-	// 删除索引
+	// DropIndex 删除索引
 	DropIndex(context.Context, Driver, *DropIndexNode) error
-	// 添加列
+	// AddColumn 添加列
 	AddColumn(context.Context, Driver, *AddColumnNode) error
-	// 修改列
+	// RenameColumn 重命名列
+	RenameColumn(context.Context, Driver, *RenameColumnNode) error
+	// AlterColumn 修改列
 	AlterColumn(context.Context, Driver, *AlterColumnNode) error
-	// 删除列
+	// DropColumn 删除列
 	DropColumn(context.Context, Driver, *DropColumnNode) error
-	// 删除主键
+	// DropPrimaryKey 删除主键
 	DropPrimaryKey(context.Context, Driver, *DropPrimaryKeyNode) error
-	// 重命名表
+	// RenameTable 重命名表
 	RenameTable(context.Context, Driver, *RenameTableNode) error
-	// 修改表说明
+	// AlterTableRemarks 修改表说明
 	AlterTableRemarks(context.Context, Driver, *AlterTableRemarksNode) error
-	// 执行自定义SQL脚本
+	// Script 执行自定义SQL脚本
 	Script(context.Context, Driver, *ScriptNode) error
 }
 ```

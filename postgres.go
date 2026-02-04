@@ -1,6 +1,6 @@
 package dbfly
 
-var PostgresDataTypeMappers = map[string]string{
+var PostgresSqlDataTypeMappers = map[string]string{
 	Varchar:   "VARCHAR",
 	Char:      "CHAR",
 	Text:      "TEXT",
@@ -17,15 +17,15 @@ var PostgresDataTypeMappers = map[string]string{
 	Blob:      "BYTEA",
 }
 
-// PostgresMigratory Postgres合并实现
-type PostgresMigratory struct {
+// PostgresSqlMigratory Postgres合并实现
+type PostgresSqlMigratory struct {
 	DefaultMigratory
 }
 
-// NewPostgresMigratory 创建一个Postgres合并实现实例
-func NewPostgresMigratory() Migratory {
+// NewPostgresSqlMigratory 创建一个Postgres合并实现实例
+func NewPostgresSqlMigratory() Migratory {
 	showTablesSql := "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'"
-	return &PostgresMigratory{
-		DefaultMigratory{name: "postgres", showTablesSql: showTablesSql, dataTypeMapper: PostgresDataTypeMappers},
+	return &PostgresSqlMigratory{
+		DefaultMigratory{name: "postgresSql", showTablesSql: showTablesSql, dataTypeMapper: PostgresSqlDataTypeMappers},
 	}
 }
