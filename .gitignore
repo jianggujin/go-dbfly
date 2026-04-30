@@ -1,0 +1,11 @@
+build/bin
+.idea
+bin
+.DS_Store
+*.log
+
+/.claude/
+/openspec/
+/CLAUDE.md
+/bash.exe.stackdump
+/docs/

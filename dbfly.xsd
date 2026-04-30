@@ -1,0 +1,1022 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            targetNamespace="https://www.jianggujin.com/c/xml/dbfly"
+            xmlns="https://www.jianggujin.com/c/xml/dbfly"
+            elementFormDefault="qualified">
+    <!-- 数据库类型定义 -->
+    <xsd:simpleType name="standardIdentifier">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">标准数据库标识，只允许字母、数字、下划线，且长度不超过50</xsd:documentation>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:string">
+            <xsd:pattern value="[a-zA-Z][a-zA-Z0-9_]*"/>
+            <xsd:maxLength value="50"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:simpleType name="string">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">非空字符串</xsd:documentation>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:string">
+            <xsd:minLength value="1"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:simpleType name="int">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">正整数</xsd:documentation>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:int">
+            <xsd:pattern value="[0-9]+"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:simpleType name="changesetId">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">变更集标识，只允许字母、下划线、中划线、点</xsd:documentation>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:string">
+            <xsd:pattern value="[a-zA-Z0-9_\-\.]+"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:simpleType name="onFailType">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">失败处理策略，可用值：HALT、SKIP</xsd:documentation>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="HALT"/>
+            <xsd:enumeration value="SKIP"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:simpleType name="dataType">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">
+                数据库类型，可用值：VARCHAR、CHAR、TEXT、CLOB、BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、DECIMAL、DATE、TIME、TIMESTAMP、BLOB
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="VARCHAR"/>
+            <xsd:enumeration value="CHAR"/>
+            <xsd:enumeration value="TEXT"/>
+            <xsd:enumeration value="CLOB"/>
+            <xsd:enumeration value="BOOLEAN"/>
+            <xsd:enumeration value="TINYINT"/>
+            <xsd:enumeration value="SMALLINT"/>
+            <xsd:enumeration value="INT"/>
+            <xsd:enumeration value="BIGINT"/>
+            <xsd:enumeration value="DECIMAL"/>
+            <xsd:enumeration value="DATE"/>
+            <xsd:enumeration value="TIME"/>
+            <xsd:enumeration value="TIMESTAMP"/>
+            <xsd:enumeration value="BLOB"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:simpleType name="boolean">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">布尔值类型，可用值：true、false</xsd:documentation>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="true"/>
+            <xsd:enumeration value="false"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <!-- 元素定义 -->
+    <xsd:element name="conditions">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">执行节点的判断条件，多个条件组之间关系为或</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element name="condition" maxOccurs="unbounded">
+                    <xsd:annotation>
+                        <xsd:documentation xml:lang="zh-CN">执行节点的判断条件，一组中的判断条件关系为与</xsd:documentation>
+                    </xsd:annotation>
+                    <xsd:complexType>
+                        <xsd:group ref="conditionItem" maxOccurs="unbounded"/>
+                    </xsd:complexType>
+                </xsd:element>
+            </xsd:sequence>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:group name="conditionItem">
+        <xsd:choice>
+            <xsd:element name="tableExists">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">判断指定表是否存在</xsd:documentation>
+                </xsd:annotation>
+                <xsd:complexType>
+                    <xsd:attribute name="tableName" type="standardIdentifier">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                    <xsd:attribute name="not" type="boolean" default="false">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">是否为非</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="columnExists">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">判断指定列是否存在</xsd:documentation>
+                </xsd:annotation>
+                <xsd:complexType>
+                    <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                    <xsd:attribute name="columnName" type="standardIdentifier" use="required">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">列名</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                    <xsd:attribute name="not" type="boolean" default="false">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">是否为非</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="primaryKeyExists">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">判断是否存在主键</xsd:documentation>
+                </xsd:annotation>
+                <xsd:complexType>
+                    <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                    <xsd:attribute name="not" type="boolean" default="false">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">是否为非</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="indexExists">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">判断指定索引是否存在</xsd:documentation>
+                </xsd:annotation>
+                <xsd:complexType>
+                    <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                    <xsd:attribute name="indexName" type="standardIdentifier" use="required">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">索引名</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                    <xsd:attribute name="not" type="boolean" default="false">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">是否为非</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="rowCount">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">判断表中记录数是否为期望行数</xsd:documentation>
+                </xsd:annotation>
+                <xsd:complexType>
+                    <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                    <xsd:attribute name="expectedRows" type="xsd:int" use="required">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">期望行数</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                    <xsd:attribute name="not" type="boolean" default="false">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">是否为非</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="sqlCheck">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">自定义SQL验证</xsd:documentation>
+                </xsd:annotation>
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="sql">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">SQL脚本</xsd:documentation>
+                            </xsd:annotation>
+                            <xsd:complexType>
+                                <xsd:simpleContent>
+                                    <xsd:extension base="string"/>
+                                </xsd:simpleContent>
+                            </xsd:complexType>
+                        </xsd:element>
+                    </xsd:sequence>
+                    <xsd:attribute name="expectedResult" type="xsd:string" use="required">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">期望结果</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                    <xsd:attribute name="not" type="boolean" default="false">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">是否为非</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="dbms">
+                <xsd:complexType>
+                    <xsd:attribute name="name" type="xsd:string" use="required">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">数据库管理系统</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                    <xsd:attribute name="not" type="boolean" default="false">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">是否为非</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                </xsd:complexType>
+            </xsd:element>
+        </xsd:choice>
+    </xsd:group>
+
+    <xsd:group name="dml">
+        <xsd:choice>
+            <xsd:element ref="insert"/>
+            <xsd:element ref="update"/>
+            <xsd:element ref="delete"/>
+            <xsd:element ref="sqlInline"/>
+            <xsd:element ref="sqlFile"/>
+        </xsd:choice>
+    </xsd:group>
+
+    <xsd:group name="ddl">
+        <xsd:choice>
+            <xsd:element ref="createTable"/>
+            <xsd:element ref="createIndex"/>
+            <xsd:element ref="createPrimaryKey"/>
+            <xsd:element ref="dropTable"/>
+            <xsd:element ref="dropIndex"/>
+            <xsd:element ref="addColumn"/>
+            <xsd:element ref="renameColumn"/>
+            <xsd:element ref="alterColumn"/>
+            <xsd:element ref="dropColumn"/>
+            <xsd:element ref="dropPrimaryKey"/>
+            <xsd:element ref="renameTable"/>
+            <xsd:element ref="alterTableComment"/>
+            <xsd:element ref="sqlFile"/>
+            <xsd:element ref="insert"/>
+            <xsd:element ref="update"/>
+            <xsd:element ref="delete"/>
+            <xsd:element ref="sqlInline"/>
+            <xsd:element ref="transaction"/>
+        </xsd:choice>
+    </xsd:group>
+
+    <xsd:element name="dbfly">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">
+                go-dbfly根元素，包含changeSet和include元素，按定义顺序执行变更集
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:choice maxOccurs="unbounded">
+                <xsd:element ref="changeSet"/>
+                <xsd:element ref="include"/>
+            </xsd:choice>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="changeSet">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">变更集，记录一组变更操作的定义</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:group ref="ddl" maxOccurs="unbounded"/>
+            <xsd:attribute name="id" type="changesetId" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">变更集唯一标识</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="author" type="xsd:string">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">作者</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="onFail" type="onFailType" default="HALT">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">失败处理策略</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="include">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">引用其他changelog文件，内容插入到当前位置</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:attribute name="file" type="string" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">引用文件路径</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="createTable">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">创建表</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element ref="column" maxOccurs="unbounded"/>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="comment" type="xsd:string">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表说明</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="column">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">列信息</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence minOccurs="0" maxOccurs="unbounded">
+                <xsd:element ref="columnDbms"/>
+            </xsd:sequence>
+            <xsd:attribute name="columnName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">列名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="dataType" type="dataType" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">数据类型</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="maxLength" type="int">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">最大长度，根据数据类型判断设置此值</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="numericScale" type="int">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">精度，根据数据类型判断设置此值</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="nullable" type="boolean" default="true">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">是否允许为null</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="unique" type="boolean" default="false">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">是否唯一键</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="primaryKey" type="boolean" default="false">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">是否主键</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="keyName" type="standardIdentifier">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">主键名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="defaultValue" type="xsd:string">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">默认值，自动使用'包裹</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="defaultOriginValue" type="xsd:string">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">默认值，不做包裹处理</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="comment" type="xsd:string">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">列说明</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="columnDbms">
+        <xsd:annotation>
+            <xsd:documentation>适应于指定数据库管理系统的列信息，用于指定特殊数据库管理系统的列定义以覆盖默认定义</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:attribute name="dbms" type="xsd:string" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">数据库管理系统</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="dataType" type="xsd:string" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">数据类型，表述对应数据库使用的原始类型定义</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="defaultValue" type="xsd:string">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">默认值，自动使用'包裹</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="defaultOriginValue" type="xsd:string">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">默认值，不做包裹处理</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="dbmsAttributes">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">额外属性，用于不同的数据库管理系统获取并做特殊处理</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence maxOccurs="unbounded">
+                <xsd:element name="attribute">
+                    <xsd:annotation>
+                        <xsd:documentation xml:lang="zh-CN">额外属性</xsd:documentation>
+                    </xsd:annotation>
+                    <xsd:complexType>
+                        <xsd:attribute name="dbms" type="xsd:string" use="required">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">数据库管理系统，用于指定该属性适应的数据库管理系统</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="name" type="xsd:string" use="required">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">属性名</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="value" type="xsd:string" use="required">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">属性值</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                    </xsd:complexType>
+                </xsd:element>
+            </xsd:sequence>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="createIndex">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">创建索引</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence maxOccurs="unbounded">
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element name="column" maxOccurs="unbounded">
+                    <xsd:annotation>
+                        <xsd:documentation xml:lang="zh-CN">索引列</xsd:documentation>
+                    </xsd:annotation>
+                    <xsd:complexType>
+                        <xsd:attribute name="name" type="standardIdentifier" use="required">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">列名</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                    </xsd:complexType>
+                </xsd:element>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="indexName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">索引名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="unique" type="boolean" default="false">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">是否唯一索引</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="createPrimaryKey">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">创建主键</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element name="column" maxOccurs="unbounded">
+                    <xsd:annotation>
+                        <xsd:documentation xml:lang="zh-CN">主键列</xsd:documentation>
+                    </xsd:annotation>
+                    <xsd:complexType>
+                        <xsd:attribute name="name" type="standardIdentifier" use="required">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">列名</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                    </xsd:complexType>
+                </xsd:element>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="keyName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">主键名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="dropTable">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">删除表</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="dropIndex">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">删除索引</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="indexName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">索引名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="addColumn">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">添加列</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence maxOccurs="unbounded">
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element name="column">
+                    <xsd:annotation>
+                        <xsd:documentation xml:lang="zh-CN">列信息</xsd:documentation>
+                    </xsd:annotation>
+                    <xsd:complexType>
+                        <xsd:sequence minOccurs="0" maxOccurs="unbounded">
+                            <xsd:element ref="columnDbms"/>
+                        </xsd:sequence>
+                        <xsd:attribute name="columnName" type="standardIdentifier" use="required">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">列名</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="dataType" type="dataType" use="required">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">数据类型</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="maxLength" type="int">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">最大长度，根据数据类型判断设置此值</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="numericScale" type="int">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">精度，根据数据类型判断设置此值</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="nullable" type="boolean" default="true">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">是否允许为null</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="unique" type="boolean" default="false">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">是否唯一键</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="defaultValue" type="xsd:string">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">默认值，自动使用'包裹</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="defaultOriginValue" type="xsd:string">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">默认值，不做包裹处理</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="comment" type="xsd:string">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">列说明</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                    </xsd:complexType>
+                </xsd:element>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="renameColumn">
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="columnName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">列名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="newColumnName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">新列名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="alterColumn">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">修改列</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element name="column">
+                    <xsd:annotation>
+                        <xsd:documentation xml:lang="zh-CN">列信息</xsd:documentation>
+                    </xsd:annotation>
+                    <xsd:complexType>
+                        <xsd:sequence minOccurs="0" maxOccurs="unbounded">
+                            <xsd:element ref="columnDbms"/>
+                        </xsd:sequence>
+                        <xsd:attribute name="dataType" type="dataType" use="required">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">数据类型</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="maxLength" type="int">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">最大长度，根据数据类型判断设置此值</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="numericScale" type="int">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">精度，根据数据类型判断设置此值</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="nullable" type="boolean" default="true">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">是否允许为null</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="unique" type="boolean" default="false">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">是否唯一键</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="defaultValue" type="xsd:string">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">默认值，自动使用'包裹</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="defaultOriginValue" type="xsd:string">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">默认值，不做包裹处理</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                        <xsd:attribute name="comment" type="xsd:string">
+                            <xsd:annotation>
+                                <xsd:documentation xml:lang="zh-CN">列说明</xsd:documentation>
+                            </xsd:annotation>
+                        </xsd:attribute>
+                    </xsd:complexType>
+                </xsd:element>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="columnName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">列名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="dropColumn">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">删除列</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="columnName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">列名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="dropPrimaryKey">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">删除主键</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="renameTable">
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="newTableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">新表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="alterTableComment">
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element ref="dbmsAttributes" minOccurs="0"/>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="comment" type="xsd:string">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表说明</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="sqlFile">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">SQL脚本文件，支持dbms方言选择</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element ref="sqlFileDbms" minOccurs="0" maxOccurs="unbounded"/>
+            </xsd:sequence>
+            <xsd:attribute name="path" type="string" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">默认SQL脚本路径</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="sqlFileDbms">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">特定数据库的SQL脚本文件</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:attribute name="dbms" type="xsd:string" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">数据库管理系统名称</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+            <xsd:attribute name="path" type="string" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">SQL脚本路径</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <!-- DML 元素定义 -->
+
+    <xsd:element name="insert">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">插入数据</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:choice>
+                    <xsd:element name="column" type="dataColumnType" maxOccurs="unbounded"/>
+                    <xsd:element name="row" maxOccurs="unbounded">
+                        <xsd:complexType>
+                            <xsd:sequence>
+                                <xsd:element name="column" type="dataColumnType" maxOccurs="unbounded"/>
+                            </xsd:sequence>
+                        </xsd:complexType>
+                    </xsd:element>
+                </xsd:choice>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:complexType name="dataColumnType">
+        <xsd:attribute name="name" type="standardIdentifier" use="required">
+            <xsd:annotation>
+                <xsd:documentation xml:lang="zh-CN">列名</xsd:documentation>
+            </xsd:annotation>
+        </xsd:attribute>
+        <xsd:attribute name="value" type="xsd:string">
+            <xsd:annotation>
+                <xsd:documentation xml:lang="zh-CN">列值，自动使用引号包裹</xsd:documentation>
+            </xsd:annotation>
+        </xsd:attribute>
+        <xsd:attribute name="originValue" type="xsd:string">
+            <xsd:annotation>
+                <xsd:documentation xml:lang="zh-CN">列值，不做包裹处理，用于SQL表达式</xsd:documentation>
+            </xsd:annotation>
+        </xsd:attribute>
+    </xsd:complexType>
+
+    <xsd:element name="update">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">更新数据</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element name="column" type="dataColumnType" maxOccurs="unbounded"/>
+                <xsd:element name="where" minOccurs="0">
+                    <xsd:complexType>
+                        <xsd:simpleContent>
+                            <xsd:extension base="xsd:string"/>
+                        </xsd:simpleContent>
+                    </xsd:complexType>
+                </xsd:element>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="delete">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">删除数据</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element name="where" minOccurs="0">
+                    <xsd:complexType>
+                        <xsd:simpleContent>
+                            <xsd:extension base="xsd:string"/>
+                        </xsd:simpleContent>
+                    </xsd:complexType>
+                </xsd:element>
+            </xsd:sequence>
+            <xsd:attribute name="tableName" type="standardIdentifier" use="required">
+                <xsd:annotation>
+                    <xsd:documentation xml:lang="zh-CN">表名</xsd:documentation>
+                </xsd:annotation>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="sqlInline">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">内联SQL，支持dbms方言选择</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element ref="conditions" minOccurs="0"/>
+                <xsd:element name="default">
+                    <xsd:annotation>
+                        <xsd:documentation xml:lang="zh-CN">默认SQL内容</xsd:documentation>
+                    </xsd:annotation>
+                    <xsd:complexType>
+                        <xsd:simpleContent>
+                            <xsd:extension base="xsd:string"/>
+                        </xsd:simpleContent>
+                    </xsd:complexType>
+                </xsd:element>
+                <xsd:element ref="sqlDbms" minOccurs="0" maxOccurs="unbounded"/>
+            </xsd:sequence>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="sqlDbms">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">特定数据库的SQL内容</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:simpleContent>
+                <xsd:extension base="xsd:string">
+                    <xsd:attribute name="dbms" type="xsd:string" use="required">
+                        <xsd:annotation>
+                            <xsd:documentation xml:lang="zh-CN">数据库管理系统名称</xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:attribute>
+                </xsd:extension>
+            </xsd:simpleContent>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="transaction">
+        <xsd:annotation>
+            <xsd:documentation xml:lang="zh-CN">事务控制，原子执行多个DML操作</xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:group ref="dml" maxOccurs="unbounded"/>
+            </xsd:sequence>
+        </xsd:complexType>
+    </xsd:element>
+</xsd:schema>
