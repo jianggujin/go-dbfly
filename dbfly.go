@@ -19,7 +19,7 @@ type Dbfly struct {
 	locker     Locker
 	tx         Tx // 当前事务上下文
 	logger     Logger
-	logSQL     bool
+	logSQLMode LogSQLMode
 }
 
 type DbflyOption func(*Dbfly)
@@ -48,9 +48,9 @@ func WithLogger(logger Logger) DbflyOption {
 	}
 }
 
-func WithLogSQL(logSQL bool) DbflyOption {
+func WithLogSQL(mode LogSQLMode) DbflyOption {
 	return func(db *Dbfly) {
-		db.logSQL = logSQL
+		db.logSQLMode = mode
 	}
 }
 
@@ -60,7 +60,6 @@ func NewDbfly(migratory Migratory, driver Driver, source Source, opts ...DbflyOp
 		driver:    driver,
 		source:    source,
 		logger:    nopLogger{},
-		logSQL:    false,
 	}
 	for _, opt := range opts {
 		opt(fly)
@@ -108,6 +107,13 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 		m.SetLogger(f.logger)
 	} else if m, ok := f.migratory.(interface{ SetLogger(Logger) }); ok {
 		m.SetLogger(f.logger)
+	}
+
+	// 包装 Driver 处理 SQL 日志
+	origDriver := f.driver
+	if f.logSQLMode != LogSQLNone {
+		f.driver = NewLoggingDriver(origDriver, f.logger, f.logSQLMode)
+		defer func() { f.driver = origDriver }()
 	}
 
 	f.logger.Info("migration started", "entrypoint", f.entrypoint)
