@@ -62,11 +62,11 @@ func (m *mockDriver) BeginTx(_ context.Context) (Tx, error) {
 
 type mockRows struct{}
 
-func (m *mockRows) Close() error                { return nil }
-func (m *mockRows) Columns() ([]string, error)  { return nil, nil }
-func (m *mockRows) Next() bool                  { return false }
-func (m *mockRows) Scan(...any) error           { return nil }
-func (m *mockRows) Err() error                  { return nil }
+func (m *mockRows) Close() error               { return nil }
+func (m *mockRows) Columns() ([]string, error) { return nil, nil }
+func (m *mockRows) Next() bool                 { return false }
+func (m *mockRows) Scan(...any) error          { return nil }
+func (m *mockRows) Err() error                 { return nil }
 
 type mockTx struct{}
 

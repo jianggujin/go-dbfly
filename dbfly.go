@@ -182,12 +182,12 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 		}
 
 		orderExecuted++
-		f.logger.Info("changeSet executing", "id", cs.Id, "author", cs.Author)
+		f.logger.Info("change set executing", "id", cs.Id, "author", cs.Author)
 		if err = f.executeChangeSet(ctx, cs, orderExecuted); err != nil && "SKIP" != cs.OnFail {
 			return err
 		}
 		if err == nil {
-			f.logger.Info("changeSet completed", "id", cs.Id)
+			f.logger.Info("change set completed", "id", cs.Id)
 		}
 	}
 

@@ -768,7 +768,7 @@ func (n *SqlInlineNode) Execute(ctx context.Context, fly *Dbfly) error {
 			break
 		}
 	}
-	fly.logger.Debug("sqlInline")
+	fly.logger.Debug("execute inline SQL")
 	return fly.Migratory().Script(ctx, fly.Driver(), content)
 }
 
