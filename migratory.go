@@ -46,7 +46,6 @@ type DefaultMigratory struct {
 	name     string
 	metaData DatabaseMetaData
 	logger   Logger
-	logSQL   bool
 }
 
 func NewDefaultMigratory(name string, metaData DatabaseMetaData) DefaultMigratory {
@@ -54,24 +53,21 @@ func NewDefaultMigratory(name string, metaData DatabaseMetaData) DefaultMigrator
 		name:     name,
 		metaData: metaData,
 		logger:   nopLogger{},
-		logSQL:   false,
 	}
 }
 
 // NewDefaultMigratoryWithLogger 创建带有日志器的迁移器
-func NewDefaultMigratoryWithLogger(name string, metaData DatabaseMetaData, logger Logger, logSQL bool) DefaultMigratory {
+func NewDefaultMigratoryWithLogger(name string, metaData DatabaseMetaData, logger Logger) DefaultMigratory {
 	return DefaultMigratory{
 		name:     name,
 		metaData: metaData,
 		logger:   logger,
-		logSQL:   logSQL,
 	}
 }
 
-// SetLogger 设置日志器和 SQL 记录开关
-func (m *DefaultMigratory) SetLogger(logger Logger, logSQL bool) {
+// SetLogger 设置日志器
+func (m *DefaultMigratory) SetLogger(logger Logger) {
 	m.logger = logger
-	m.logSQL = logSQL
 }
 
 func (m *DefaultMigratory) Name() string {
@@ -121,9 +117,6 @@ func (m *DefaultMigratory) CreateTable(ctx context.Context, driver Driver, table
 		builder.WriteString(")")
 	}
 	builder.WriteString("\n)")
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", builder.String())
-	}
 	if err := driver.Execute(ctx, builder.String()); err != nil {
 		return err
 	}
@@ -131,9 +124,6 @@ func (m *DefaultMigratory) CreateTable(ctx context.Context, driver Driver, table
 	if comment != "" {
 		commentSQL := fmt.Sprintf("COMMENT ON TABLE %s IS '%s'",
 			m.Quote(tableName), ReplaceComment(comment))
-		if m.logSQL {
-			m.logger.Debug("execute SQL", "sql", commentSQL)
-		}
 		if err := driver.Execute(ctx, commentSQL); err != nil {
 			return err
 		}
@@ -142,9 +132,6 @@ func (m *DefaultMigratory) CreateTable(ctx context.Context, driver Driver, table
 		if comment != "" {
 			columnCommentSQL := fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s'",
 				m.Quote(tableName), m.Quote(column.ColumnName), ReplaceComment(column.Comment))
-			if m.logSQL {
-				m.logger.Debug("execute SQL", "sql", columnCommentSQL)
-			}
 			if err := driver.Execute(ctx, columnCommentSQL); err != nil {
 				return err
 			}
@@ -220,9 +207,6 @@ func (m *DefaultMigratory) CreateIndex(ctx context.Context, driver Driver, table
 	}
 	m.metaData.Quoter().MustJoinWrite(&builder, columnNames, ", ")
 	builder.WriteString(")")
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", builder.String())
-	}
 	return driver.Execute(ctx, builder.String())
 }
 
@@ -240,27 +224,18 @@ func (m *DefaultMigratory) CreatePrimaryKey(ctx context.Context, driver Driver, 
 	}
 	m.metaData.Quoter().MustJoinWrite(&builder, columnNames, ", ")
 	builder.WriteString(")")
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", builder.String())
-	}
 	return driver.Execute(ctx, builder.String())
 }
 
 func (m *DefaultMigratory) DropTable(ctx context.Context, driver Driver, tableName string, _ *AttributesNode) error {
 	m.logger.Debug("drop table", "tableName", tableName)
 	sql := fmt.Sprintf("DROP TABLE %s", m.Quote(tableName))
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", sql)
-	}
 	return driver.Execute(ctx, sql)
 }
 
 func (m *DefaultMigratory) DropIndex(ctx context.Context, driver Driver, _, indexName string, _ *AttributesNode) error {
 	m.logger.Debug("drop index", "indexName", indexName)
 	sql := fmt.Sprintf("DROP INDEX %s", m.Quote(indexName))
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", sql)
-	}
 	return driver.Execute(ctx, sql)
 }
 
@@ -272,18 +247,12 @@ func (m *DefaultMigratory) AddColumn(ctx context.Context, driver Driver, tableNa
 		m.QuoteTo(&builder, tableName)
 		builder.WriteString(" ADD ")
 		m.CreateAddTableColumn(column, &builder)
-		if m.logSQL {
-			m.logger.Debug("execute SQL", "sql", builder.String())
-		}
 		if err := driver.Execute(ctx, builder.String()); err != nil {
 			return err
 		}
 		if column.Comment != "" {
 			commentSQL := fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s'",
 				m.Quote(tableName), m.Quote(column.ColumnName), ReplaceComment(column.Comment))
-			if m.logSQL {
-				m.logger.Debug("execute SQL", "sql", commentSQL)
-			}
 			if err := driver.Execute(ctx, commentSQL); err != nil {
 				return err
 			}
@@ -341,9 +310,6 @@ func (m *DefaultMigratory) RenameColumn(ctx context.Context, driver Driver, tabl
 	m.QuoteTo(&builder, columnName)
 	builder.WriteString(" TO ")
 	m.QuoteTo(&builder, newColumnName)
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", builder.String())
-	}
 	return driver.Execute(ctx, builder.String())
 }
 
@@ -354,9 +320,6 @@ func (m *DefaultMigratory) AlterColumn(ctx context.Context, driver Driver, table
 	m.QuoteTo(&builder, tableName)
 	builder.WriteString(" MODIFY ")
 	m.CreateAlterTableColumn(column, &builder, columnName)
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", builder.String())
-	}
 	return driver.Execute(ctx, builder.String())
 }
 
@@ -403,36 +366,24 @@ func (m *DefaultMigratory) CreateAlterTableColumn(node *AlterColumnColumnNode, b
 func (m *DefaultMigratory) DropColumn(ctx context.Context, driver Driver, tableName string, columnName string, _ *AttributesNode) error {
 	m.logger.Debug("drop column", "tableName", tableName, "columnName", columnName)
 	sql := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", m.Quote(tableName), m.Quote(columnName))
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", sql)
-	}
 	return driver.Execute(ctx, sql)
 }
 
 func (m *DefaultMigratory) DropPrimaryKey(ctx context.Context, driver Driver, tableName string, _ *AttributesNode) error {
 	m.logger.Debug("drop primary key", "tableName", tableName)
 	sql := fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", m.Quote(tableName))
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", sql)
-	}
 	return driver.Execute(ctx, sql)
 }
 
 func (m *DefaultMigratory) RenameTable(ctx context.Context, driver Driver, tableName string, newTableName string, _ *AttributesNode) error {
 	m.logger.Debug("rename table", "tableName", tableName, "newTableName", newTableName)
 	sql := fmt.Sprintf("ALTER TABLE %s RENAME TO %s", m.Quote(tableName), m.Quote(newTableName))
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", sql)
-	}
 	return driver.Execute(ctx, sql)
 }
 
 func (m *DefaultMigratory) AlterTableComment(ctx context.Context, driver Driver, tableName string, comment string, _ *AttributesNode) error {
 	m.logger.Debug("alter table comment", "tableName", tableName)
 	sql := fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", m.Quote(tableName), ReplaceComment(comment))
-	if m.logSQL {
-		m.logger.Debug("execute SQL", "sql", sql)
-	}
 	return driver.Execute(ctx, sql)
 }
 
@@ -442,9 +393,6 @@ func (m *DefaultMigratory) Script(ctx context.Context, driver Driver, script str
 		statement = strings.TrimSpace(statement)
 		if statement == "" {
 			continue
-		}
-		if m.logSQL {
-			m.logger.Debug("execute SQL", "sql", statement)
 		}
 		if err := driver.Execute(ctx, statement); err != nil {
 			return err

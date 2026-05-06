@@ -105,9 +105,9 @@ func (f *Dbfly) Migrate() error {
 func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 	// 同步日志配置到 Migratory
 	if m, ok := f.migratory.(*DefaultMigratory); ok {
-		m.SetLogger(f.logger, f.logSQL)
-	} else if m, ok := f.migratory.(interface{ SetLogger(Logger, bool) }); ok {
-		m.SetLogger(f.logger, f.logSQL)
+		m.SetLogger(f.logger)
+	} else if m, ok := f.migratory.(interface{ SetLogger(Logger) }); ok {
+		m.SetLogger(f.logger)
 	}
 
 	f.logger.Info("migration started", "entrypoint", f.entrypoint)
