@@ -631,6 +631,7 @@ func (n *InsertNode) Execute(ctx context.Context, fly *Dbfly) error {
 		return err
 	}
 	quoter := fly.Migratory().MetaData().Quoter()
+	var sql string
 
 	if len(n.Rows) > 0 {
 		// 批量模式
@@ -659,7 +660,12 @@ func (n *InsertNode) Execute(ctx context.Context, fly *Dbfly) error {
 			}
 			builder.WriteString(")")
 		}
-		return fly.Execute(ctx, builder.String())
+		sql = builder.String()
+		fly.logger.Debug("insert", "tableName", n.TableName, "rows", len(n.Rows))
+		if fly.logSQL {
+			fly.logger.Debug("execute SQL", "sql", sql)
+		}
+		return fly.Execute(ctx, sql)
 	}
 
 	// 单行模式
@@ -684,7 +690,12 @@ func (n *InsertNode) Execute(ctx context.Context, fly *Dbfly) error {
 		writeColumnValue(&builder, col)
 	}
 	builder.WriteString(")")
-	return fly.Execute(ctx, builder.String())
+	sql = builder.String()
+	fly.logger.Debug("insert", "tableName", n.TableName, "rows", 1)
+	if fly.logSQL {
+		fly.logger.Debug("execute SQL", "sql", sql)
+	}
+	return fly.Execute(ctx, sql)
 }
 
 // UpdateNode 更新数据节点
@@ -716,7 +727,12 @@ func (n *UpdateNode) Execute(ctx context.Context, fly *Dbfly) error {
 		builder.WriteString(" WHERE ")
 		builder.WriteString(n.Where)
 	}
-	return fly.Execute(ctx, builder.String())
+	sql := builder.String()
+	fly.logger.Debug("update", "tableName", n.TableName)
+	if fly.logSQL {
+		fly.logger.Debug("execute SQL", "sql", sql)
+	}
+	return fly.Execute(ctx, sql)
 }
 
 // DeleteNode 删除数据节点
@@ -738,7 +754,12 @@ func (n *DeleteNode) Execute(ctx context.Context, fly *Dbfly) error {
 		builder.WriteString(" WHERE ")
 		builder.WriteString(n.Where)
 	}
-	return fly.Execute(ctx, builder.String())
+	sql := builder.String()
+	fly.logger.Debug("delete", "tableName", n.TableName)
+	if fly.logSQL {
+		fly.logger.Debug("execute SQL", "sql", sql)
+	}
+	return fly.Execute(ctx, sql)
 }
 
 // SqlInlineNode 内联SQL节点
@@ -758,6 +779,10 @@ func (n *SqlInlineNode) Execute(ctx context.Context, fly *Dbfly) error {
 			content = dbmsNode.Content
 			break
 		}
+	}
+	fly.logger.Debug("sqlInline")
+	if fly.logSQL {
+		fly.logger.Debug("execute SQL", "sql", content)
 	}
 	return fly.Migratory().Script(ctx, fly.Driver(), content)
 }
@@ -812,6 +837,7 @@ func (n *TransactionNode) UnmarshalXML(decoder *xml.Decoder, start xml.StartElem
 }
 
 func (n *TransactionNode) Execute(ctx context.Context, fly *Dbfly) error {
+	fly.logger.Debug("transaction begin", "dmlCount", len(n.DMLs))
 	tx, err := fly.driver.BeginTx(ctx)
 	if err != nil {
 		return Wrap(err, "failed to begin transaction")
@@ -824,12 +850,19 @@ func (n *TransactionNode) Execute(ctx context.Context, fly *Dbfly) error {
 	for _, ddl := range n.DMLs {
 		if err = ddl.Execute(ctx, fly); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
+				fly.logger.Error("transaction rollback failed", "error", rbErr)
 				return New("operation failed: %w, rollback also failed: %w", err, rbErr)
 			}
+			fly.logger.Debug("transaction rolled back", "error", err)
 			return err
 		}
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		fly.logger.Error("transaction commit failed", "error", err)
+		return err
+	}
+	fly.logger.Debug("transaction committed")
+	return nil
 }
 
 // writeColumnValue 写入列值

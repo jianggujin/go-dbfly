@@ -76,7 +76,11 @@ func (r *DbRecorder) InitChangeLogTable(ctx context.Context, fly *Dbfly) error {
 		quoter.MustQuote(COLUMN_CREATED_AT), metaData.DataType(Timestamp),
 		quoter.MustQuote(COLUMN_UPDATED_AT), metaData.DataType(Timestamp),
 	)
-	return driver.Execute(ctx, sql)
+	if err := driver.Execute(ctx, sql); err != nil {
+		return err
+	}
+	fly.logger.Debug("change log table initialized")
+	return nil
 }
 
 func (r *DbRecorder) GetExecutedChangeSets(ctx context.Context, fly *Dbfly) (map[string]bool, error) {
@@ -115,13 +119,17 @@ func (r *DbRecorder) NewChangeLog(ctx context.Context, fly *Dbfly, changeSetId, 
 		changeSetId); err != nil {
 		return err
 	}
-	return driver.Execute(ctx,
+	if err := driver.Execute(ctx,
 		fmt.Sprintf("INSERT INTO %s(%s, %s, %s, %s, %s, %s, %s) VALUES(?, ?, ?, ?, 0, ?, ?)",
 			quoter.MustQuote(r.tableName),
 			quoter.MustQuote(COLUMN_CHANGESET_ID), quoter.MustQuote(COLUMN_AUTHOR),
 			quoter.MustQuote(COLUMN_FILENAME), quoter.MustQuote(COLUMN_ORDER_EXECUTED),
 			quoter.MustQuote(COLUMN_IS_SUCCESS), quoter.MustQuote(COLUMN_CREATED_AT), quoter.MustQuote(COLUMN_UPDATED_AT)),
-		changeSetId, author, filename, orderExecuted, time.Now(), time.Now())
+		changeSetId, author, filename, orderExecuted, time.Now(), time.Now()); err != nil {
+		return err
+	}
+	fly.logger.Debug("change log created", "changeSetId", changeSetId)
+	return nil
 }
 
 func (r *DbRecorder) CompleteChangeLog(ctx context.Context, fly *Dbfly, changeSetId string) error {
@@ -129,9 +137,13 @@ func (r *DbRecorder) CompleteChangeLog(ctx context.Context, fly *Dbfly, changeSe
 	driver := fly.Driver()
 	metaData := migratory.MetaData()
 	quoter := metaData.Quoter()
-	return driver.Execute(ctx,
+	if err := driver.Execute(ctx,
 		fmt.Sprintf("UPDATE %s SET %s = 1, %s = ? WHERE %s = ? AND %s = 0",
 			quoter.MustQuote(r.tableName), quoter.MustQuote(COLUMN_IS_SUCCESS),
 			quoter.MustQuote(COLUMN_UPDATED_AT), quoter.MustQuote(COLUMN_CHANGESET_ID), quoter.MustQuote(COLUMN_IS_SUCCESS)),
-		time.Now(), changeSetId)
+		time.Now(), changeSetId); err != nil {
+		return err
+	}
+	fly.logger.Debug("change log completed", "changeSetId", changeSetId)
+	return nil
 }

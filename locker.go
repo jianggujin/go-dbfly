@@ -107,6 +107,7 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 	for retry := 0; retry < l.maxRetries; retry++ {
 		// 检查超时
 		if time.Now().After(deadline) {
+			fly.logger.Error("lock acquisition timeout", "timeout", l.timeout)
 			return nil, New("lock acquisition timeout after %v", l.timeout)
 		}
 
@@ -135,6 +136,7 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 				quoter.MustQuote(LOCK_COLUMN_VERSION))
 			if err = driver.Execute(ctx, updateSQL, hostname, time.Now(), newVersion, currentVersion); err != nil {
 				// UPDATE 失败（版本不匹配），等待后重试
+				fly.logger.Warn("lock acquisition retry", "attempt", retry+1, "maxRetries", l.maxRetries)
 				time.Sleep(l.retryInterval)
 				continue
 			}
@@ -150,6 +152,7 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 				quoter.MustQuote(LOCK_COLUMN_LOCK_TIME),
 				quoter.MustQuote(LOCK_COLUMN_VERSION))
 			if err = driver.Execute(ctx, insertSQL, hostname, time.Now(), currentVersion); err != nil {
+				fly.logger.Warn("lock acquisition retry", "attempt", retry+1, "maxRetries", l.maxRetries)
 				// INSERT 失败（记录已存在），等待后重试
 				time.Sleep(l.retryInterval)
 				continue
@@ -163,6 +166,7 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 			return nil, err
 		}
 		if lockedBy != hostname || currentVersion != version {
+			fly.logger.Warn("lock acquisition retry", "attempt", retry+1, "maxRetries", l.maxRetries)
 			// 验证失败，等待后重试
 			time.Sleep(l.retryInterval)
 			continue
