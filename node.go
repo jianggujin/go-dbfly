@@ -662,9 +662,6 @@ func (n *InsertNode) Execute(ctx context.Context, fly *Dbfly) error {
 		}
 		sql = builder.String()
 		fly.logger.Debug("insert", "tableName", n.TableName, "rows", len(n.Rows))
-		if fly.logSQL {
-			fly.logger.Debug("execute SQL", "sql", sql)
-		}
 		return fly.Execute(ctx, sql)
 	}
 
@@ -692,9 +689,6 @@ func (n *InsertNode) Execute(ctx context.Context, fly *Dbfly) error {
 	builder.WriteString(")")
 	sql = builder.String()
 	fly.logger.Debug("insert", "tableName", n.TableName, "rows", 1)
-	if fly.logSQL {
-		fly.logger.Debug("execute SQL", "sql", sql)
-	}
 	return fly.Execute(ctx, sql)
 }
 
@@ -729,9 +723,6 @@ func (n *UpdateNode) Execute(ctx context.Context, fly *Dbfly) error {
 	}
 	sql := builder.String()
 	fly.logger.Debug("update", "tableName", n.TableName)
-	if fly.logSQL {
-		fly.logger.Debug("execute SQL", "sql", sql)
-	}
 	return fly.Execute(ctx, sql)
 }
 
@@ -756,9 +747,6 @@ func (n *DeleteNode) Execute(ctx context.Context, fly *Dbfly) error {
 	}
 	sql := builder.String()
 	fly.logger.Debug("delete", "tableName", n.TableName)
-	if fly.logSQL {
-		fly.logger.Debug("execute SQL", "sql", sql)
-	}
 	return fly.Execute(ctx, sql)
 }
 
@@ -781,9 +769,6 @@ func (n *SqlInlineNode) Execute(ctx context.Context, fly *Dbfly) error {
 		}
 	}
 	fly.logger.Debug("sqlInline")
-	if fly.logSQL {
-		fly.logger.Debug("execute SQL", "sql", content)
-	}
 	return fly.Migratory().Script(ctx, fly.Driver(), content)
 }
 
