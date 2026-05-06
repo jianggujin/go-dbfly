@@ -38,10 +38,10 @@ func (l *LoggingDriver) BeginTx(ctx context.Context) (Tx, error) {
 
 func (l *LoggingDriver) logSQL(action, sql string, args []any) {
 	if l.logSQLMode&LogSQLTemplate != 0 {
-		l.logger.Debug(action, "sql", sql)
+		l.logger.Debug(action, "statement", sql)
 	}
 	if l.logSQLMode&LogSQLParams != 0 && len(args) > 0 {
-		l.logger.Debug("SQL parameters", "args", args)
+		l.logger.Debug("SQL parameters", "parameters", args)
 	}
 }
 
@@ -72,9 +72,9 @@ func (l *LoggingTx) Rollback() error {
 
 func (l *LoggingTx) logSQL(action, sql string, args []any) {
 	if l.logSQLMode&LogSQLTemplate != 0 {
-		l.logger.Debug(action, "sql", sql)
+		l.logger.Debug(action, "statement", sql)
 	}
 	if l.logSQLMode&LogSQLParams != 0 && len(args) > 0 {
-		l.logger.Debug("SQL parameters", "args", args)
+		l.logger.Debug("SQL parameters", "parameters", args)
 	}
 }
