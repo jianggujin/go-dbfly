@@ -20,3 +20,15 @@ func (nopLogger) Debug(msg string, keysAndValues ...any) {}
 func (nopLogger) Info(msg string, keysAndValues ...any)  {}
 func (nopLogger) Warn(msg string, keysAndValues ...any)  {}
 func (nopLogger) Error(msg string, keysAndValues ...any) {}
+
+// LogSQLMode SQL 日志模式，使用位运算组合
+type LogSQLMode int
+
+const (
+	LogSQLNone LogSQLMode = 0
+
+	// LogSQLTemplate 记录 SQL 模板（带 ? 占位符）
+	LogSQLTemplate LogSQLMode = 1 << iota
+	// LogSQLParams 记录 SQL 参数
+	LogSQLParams
+)
