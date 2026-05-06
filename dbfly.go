@@ -18,6 +18,8 @@ type Dbfly struct {
 	recorder   Recorder
 	locker     Locker
 	tx         Tx // 当前事务上下文
+	logger     Logger
+	logSQL     bool
 }
 
 type DbflyOption func(*Dbfly)
@@ -40,11 +42,25 @@ func WithLocker(locker Locker) DbflyOption {
 	}
 }
 
+func WithLogger(logger Logger) DbflyOption {
+	return func(db *Dbfly) {
+		db.logger = logger
+	}
+}
+
+func WithLogSQL(logSQL bool) DbflyOption {
+	return func(db *Dbfly) {
+		db.logSQL = logSQL
+	}
+}
+
 func NewDbfly(migratory Migratory, driver Driver, source Source, opts ...DbflyOption) *Dbfly {
 	fly := &Dbfly{
 		migratory: migratory,
 		driver:    driver,
 		source:    source,
+		logger:    nopLogger{},
+		logSQL:    false,
 	}
 	for _, opt := range opts {
 		opt(fly)
@@ -87,6 +103,15 @@ func (f *Dbfly) Migrate() error {
 }
 
 func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
+	// 同步日志配置到 Migratory
+	if m, ok := f.migratory.(*DefaultMigratory); ok {
+		m.SetLogger(f.logger, f.logSQL)
+	} else if m, ok := f.migratory.(interface{ SetLogger(Logger, bool) }); ok {
+		m.SetLogger(f.logger, f.logSQL)
+	}
+
+	f.logger.Info("migration started", "entrypoint", f.entrypoint)
+
 	var unlock Unlock
 	defer func() {
 		if r := recover(); r != nil {
@@ -100,6 +125,7 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 
 		if unlock != nil {
 			_ = unlock(ctx, f)
+			f.logger.Debug("lock released")
 		}
 	}()
 
@@ -108,6 +134,8 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+
+	f.logger.Debug("changelog parsed", "changeSetCount", len(changeSets))
 
 	// 检测重复 changeSet id
 	changeSetIds := make(map[string]bool)
@@ -123,6 +151,7 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 		if unlock, err = f.locker.Lock(ctx, f); err != nil {
 			return err
 		}
+		f.logger.Debug("lock acquired")
 	}
 
 	// 初始化变更记录表
@@ -138,18 +167,25 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 
 	// 按顺序执行未执行的 changeSet
 	orderExecuted := 0
+	skippedCount := 0
 	for _, cs := range changeSets {
 		// 获取已执行的最大 orderExecuted
 		if executedChangeSets[cs.Id] {
+			skippedCount++
 			continue
 		}
 
 		orderExecuted++
+		f.logger.Info("changeSet executing", "id", cs.Id, "author", cs.Author)
 		if err = f.executeChangeSet(ctx, cs, orderExecuted); err != nil && "SKIP" != cs.OnFail {
 			return err
 		}
+		if err == nil {
+			f.logger.Info("changeSet completed", "id", cs.Id)
+		}
 	}
 
+	f.logger.Info("migration completed", "executed", orderExecuted, "skipped", skippedCount)
 	return nil
 }
 
