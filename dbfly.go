@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"io"
 	"regexp"
+	"strings"
 )
 
 const defaultEntrypoint = "dbfly.xml"
@@ -285,6 +286,18 @@ func (f *Dbfly) parseXmlContent(filename string, content []byte, visited map[str
 					return nil, err
 				}
 				// 递归解析引用文件，内容插入到当前位置
+				include.File = strings.ReplaceAll(include.File, "\\", "/")
+				if len(include.File) == 0 {
+					return nil, New("invalid include file: %q", include.File)
+				}
+				// 相对路径
+				if include.File[0] != '/' {
+					filename = strings.TrimLeft(strings.ReplaceAll(filename, "\\", "/"), "/")
+					paths := strings.Split(filename, "/")
+					include.File = strings.Join(append(paths[:len(paths)-1], include.File), "/")
+				} else {
+					include.File = strings.TrimLeft(include.File, "/")
+				}
 				includedChangeSets, err := f.parseChangelog(include.File, visited)
 				if err != nil {
 					return nil, err
