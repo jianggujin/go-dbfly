@@ -1,6 +1,9 @@
 package dbfly
 
-import "context"
+import (
+	"context"
+	"database/sql"
+)
 
 // LoggingDriver 包装 Driver，统一处理 SQL 日志
 type LoggingDriver struct {
@@ -18,7 +21,7 @@ func NewLoggingDriver(driver Driver, logger Logger, logSQLMode LogSQLMode) *Logg
 	}
 }
 
-func (l *LoggingDriver) Execute(ctx context.Context, sql string, args ...any) error {
+func (l *LoggingDriver) Execute(ctx context.Context, sql string, args ...any) (sql.Result, error) {
 	l.logSQL("execute SQL", sql, args)
 	return l.driver.Execute(ctx, sql, args...)
 }
@@ -52,7 +55,7 @@ type LoggingTx struct {
 	logSQLMode LogSQLMode
 }
 
-func (l *LoggingTx) Execute(ctx context.Context, sql string, args ...any) error {
+func (l *LoggingTx) Execute(ctx context.Context, sql string, args ...any) (sql.Result, error) {
 	l.logSQL("execute SQL (tx)", sql, args)
 	return l.tx.Execute(ctx, sql, args...)
 }

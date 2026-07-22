@@ -3,6 +3,7 @@ package dbfly
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/xml"
 	"io"
 	"regexp"
@@ -86,7 +87,7 @@ func (f *Dbfly) Driver() Driver {
 }
 
 // Execute 执行SQL（自动使用事务或直接执行）
-func (f *Dbfly) Execute(ctx context.Context, sql string, args ...any) error {
+func (f *Dbfly) Execute(ctx context.Context, sql string, args ...any) (sql.Result, error) {
 	if f.tx != nil {
 		return f.tx.Execute(ctx, sql, args...)
 	}

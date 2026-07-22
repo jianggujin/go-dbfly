@@ -85,6 +85,9 @@ func (m *SqliteDatabaseMetaData) GetTables(ctx context.Context, driver Driver) (
 				return err
 			}
 		}
+		if err = plan.Scan(rows); err != nil {
+			return err
+		}
 		lowerName := sqliteUnquoteIdentifier(strings.ToLower(name.String))
 		if "sqlite_sequence" == lowerName || "sqlite_schema" == lowerName || "sqlite_temp_schema" == lowerName {
 			return nil
@@ -119,6 +122,9 @@ func (m *SqliteDatabaseMetaData) GetColumns(ctx context.Context, driver Driver, 
 				return err
 			}
 		}
+		if err = plan.Scan(rows); err != nil {
+			return err
+		}
 		list = append(list, sqliteUnquoteIdentifier(name.String))
 		return nil
 	}, sql, tableName)
@@ -141,6 +147,9 @@ func (m *SqliteDatabaseMetaData) GetIndexes(ctx context.Context, driver Driver, 
 			if plan, err = newScanPlan(rows, binders); err != nil {
 				return err
 			}
+		}
+		if err = plan.Scan(rows); err != nil {
+			return err
 		}
 		list = append(list, name.String)
 		return nil
@@ -179,6 +188,9 @@ func (m *SqliteDatabaseMetaData) getIndexInfo(ctx context.Context, driver Driver
 			if plan, err = newScanPlan(rows, binders); err != nil {
 				return err
 			}
+		}
+		if err = plan.Scan(rows); err != nil {
+			return err
 		}
 		list = append(list, sqliteUnquoteIdentifier(name.String))
 		return nil
@@ -272,6 +284,9 @@ func (m *SqliteDatabaseMetaData) GetPrimaryKeys(ctx context.Context, driver Driv
 				return err
 			}
 		}
+		if err = plan.Scan(rows); err != nil {
+			return err
+		}
 		if pk.Int32 == 1 {
 			primaryKeys = append(primaryKeys, &PrimaryKey{
 				Name:       pkName,
@@ -345,7 +360,7 @@ func (m *SqliteMigratory) CreateTable(ctx context.Context, driver Driver, tableN
 		builder.WriteString(")")
 	}
 	builder.WriteString("\n)")
-	if err := driver.Execute(ctx, builder.String()); err != nil {
+	if _, err := driver.Execute(ctx, builder.String()); err != nil {
 		return err
 	}
 	return nil
@@ -394,7 +409,7 @@ func (m *SqliteMigratory) CreatePrimaryKey(ctx context.Context, driver Driver, t
 }
 
 func (m *SqliteMigratory) copyTable(ctx context.Context, driver Driver, createSql string, columnNames []string, tmpTableName, tableName string, indexSqls []string, nameMapper map[string]string) error {
-	if err := driver.Execute(ctx, createSql); err != nil {
+	if _, err := driver.Execute(ctx, createSql); err != nil {
 		return err
 	}
 	columnNameStr := m.metaData.Quoter().MustJoin(columnNames, ", ")
@@ -411,17 +426,17 @@ func (m *SqliteMigratory) copyTable(ctx context.Context, driver Driver, createSq
 		}
 	}
 	newColumnNameStr := m.metaData.Quoter().MustJoin(newColumnNames, ", ")
-	if err := driver.Execute(ctx, fmt.Sprintf("INSERT INTO %s(%s) SELECT %s FROM %s", m.Quote(tmpTableName), newColumnNameStr, columnNameStr, m.Quote(tableName))); err != nil {
+	if _, err := driver.Execute(ctx, fmt.Sprintf("INSERT INTO %s(%s) SELECT %s FROM %s", m.Quote(tmpTableName), newColumnNameStr, columnNameStr, m.Quote(tableName))); err != nil {
 		return err
 	}
-	if err := driver.Execute(ctx, fmt.Sprintf("DROP TABLE %s", m.Quote(tableName))); err != nil {
+	if _, err := driver.Execute(ctx, fmt.Sprintf("DROP TABLE %s", m.Quote(tableName))); err != nil {
 		return err
 	}
-	if err := driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", m.Quote(tmpTableName), m.Quote(tableName))); err != nil {
+	if _, err := driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", m.Quote(tmpTableName), m.Quote(tableName))); err != nil {
 		return err
 	}
 	for _, indexSql := range indexSqls {
-		if err := driver.Execute(ctx, indexSql); err != nil {
+		if _, err := driver.Execute(ctx, indexSql); err != nil {
 			return err
 		}
 	}
@@ -499,7 +514,7 @@ func (m *SqliteMigratory) AddColumn(ctx context.Context, driver Driver, tableNam
 		m.QuoteTo(&builder, tableName)
 		builder.WriteString(" ADD ")
 		m.CreateAddTableColumn(column, &builder)
-		if err := driver.Execute(ctx, builder.String()); err != nil {
+		if _, err := driver.Execute(ctx, builder.String()); err != nil {
 			return err
 		}
 	}

@@ -76,7 +76,7 @@ func (r *DbRecorder) InitChangeLogTable(ctx context.Context, fly *Dbfly) error {
 		quoter.MustQuote(COLUMN_CREATED_AT), metaData.DataType(Timestamp),
 		quoter.MustQuote(COLUMN_UPDATED_AT), metaData.DataType(Timestamp),
 	)
-	if err := driver.Execute(ctx, sql); err != nil {
+	if _, err = driver.Execute(ctx, sql); err != nil {
 		return err
 	}
 	fly.logger.Debug("change log table initialized")
@@ -111,7 +111,7 @@ func (r *DbRecorder) NewChangeLog(ctx context.Context, fly *Dbfly, changeSetId, 
 	metaData := migratory.MetaData()
 	quoter := metaData.Quoter()
 	// 先删除失败的记录（IS_SUCCESS = 0），避免主键冲突
-	if err := driver.Execute(ctx,
+	if _, err := driver.Execute(ctx,
 		fmt.Sprintf("DELETE FROM %s WHERE %s = ? AND %s = 0",
 			quoter.MustQuote(r.tableName),
 			quoter.MustQuote(COLUMN_CHANGESET_ID),
@@ -119,7 +119,7 @@ func (r *DbRecorder) NewChangeLog(ctx context.Context, fly *Dbfly, changeSetId, 
 		changeSetId); err != nil {
 		return err
 	}
-	if err := driver.Execute(ctx,
+	if _, err := driver.Execute(ctx,
 		fmt.Sprintf("INSERT INTO %s(%s, %s, %s, %s, %s, %s, %s) VALUES(?, ?, ?, ?, 0, ?, ?)",
 			quoter.MustQuote(r.tableName),
 			quoter.MustQuote(COLUMN_CHANGESET_ID), quoter.MustQuote(COLUMN_AUTHOR),
@@ -137,7 +137,7 @@ func (r *DbRecorder) CompleteChangeLog(ctx context.Context, fly *Dbfly, changeSe
 	driver := fly.Driver()
 	metaData := migratory.MetaData()
 	quoter := metaData.Quoter()
-	if err := driver.Execute(ctx,
+	if _, err := driver.Execute(ctx,
 		fmt.Sprintf("UPDATE %s SET %s = 1, %s = ? WHERE %s = ? AND %s = 0",
 			quoter.MustQuote(r.tableName), quoter.MustQuote(COLUMN_IS_SUCCESS),
 			quoter.MustQuote(COLUMN_UPDATED_AT), quoter.MustQuote(COLUMN_CHANGESET_ID), quoter.MustQuote(COLUMN_IS_SUCCESS)),

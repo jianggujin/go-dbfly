@@ -662,7 +662,8 @@ func (n *InsertNode) Execute(ctx context.Context, fly *Dbfly) error {
 		}
 		sql = builder.String()
 		fly.logger.Debug("insert", "tableName", n.TableName, "rows", len(n.Rows))
-		return fly.Execute(ctx, sql)
+		_, err := fly.Execute(ctx, sql)
+		return err
 	}
 
 	// 单行模式
@@ -689,7 +690,8 @@ func (n *InsertNode) Execute(ctx context.Context, fly *Dbfly) error {
 	builder.WriteString(")")
 	sql = builder.String()
 	fly.logger.Debug("insert", "tableName", n.TableName, "rows", 1)
-	return fly.Execute(ctx, sql)
+	_, err := fly.Execute(ctx, sql)
+	return err
 }
 
 // UpdateNode 更新数据节点
@@ -723,7 +725,8 @@ func (n *UpdateNode) Execute(ctx context.Context, fly *Dbfly) error {
 	}
 	sql := builder.String()
 	fly.logger.Debug("update", "tableName", n.TableName)
-	return fly.Execute(ctx, sql)
+	_, err := fly.Execute(ctx, sql)
+	return err
 }
 
 // DeleteNode 删除数据节点
@@ -747,7 +750,8 @@ func (n *DeleteNode) Execute(ctx context.Context, fly *Dbfly) error {
 	}
 	sql := builder.String()
 	fly.logger.Debug("delete", "tableName", n.TableName)
-	return fly.Execute(ctx, sql)
+	_, err := fly.Execute(ctx, sql)
+	return err
 }
 
 // SqlInlineNode 内联SQL节点

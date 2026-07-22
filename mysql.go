@@ -249,7 +249,8 @@ func (m *MysqlMigratory) CreateTable(ctx context.Context, driver Driver, tableNa
 		builder.WriteString(ReplaceComment(comment))
 		builder.WriteString("'")
 	}
-	return driver.Execute(ctx, builder.String())
+	_, err := driver.Execute(ctx, builder.String())
+	return err
 }
 
 func (m *MysqlMigratory) createTableColumn(node *ColumnNode, builder *strings.Builder) bool {
@@ -264,7 +265,8 @@ func (m *MysqlMigratory) createTableColumn(node *ColumnNode, builder *strings.Bu
 }
 
 func (m *MysqlMigratory) DropIndex(ctx context.Context, driver Driver, tableName, indexName string, _ *AttributesNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("DROP INDEX %s ON %s", m.Quote(indexName), m.Quote(tableName)))
+	_, err := driver.Execute(ctx, fmt.Sprintf("DROP INDEX %s ON %s", m.Quote(indexName), m.Quote(tableName)))
+	return err
 }
 
 func (m *MysqlMigratory) AddColumn(ctx context.Context, driver Driver, tableName string, columns []*AddColumnColumnNode, _ *AttributesNode) error {
@@ -274,7 +276,7 @@ func (m *MysqlMigratory) AddColumn(ctx context.Context, driver Driver, tableName
 		m.QuoteTo(&builder, tableName)
 		builder.WriteString(" ADD ")
 		m.createAddTableColumn(column, &builder)
-		if err := driver.Execute(ctx, builder.String()); err != nil {
+		if _, err := driver.Execute(ctx, builder.String()); err != nil {
 			return err
 		}
 	}
@@ -297,7 +299,8 @@ func (m *MysqlMigratory) AlterColumn(ctx context.Context, driver Driver, tableNa
 	m.QuoteTo(&builder, tableName)
 	builder.WriteString(" MODIFY ")
 	m.createAlterTableColumn(column, &builder, columnName)
-	return driver.Execute(ctx, builder.String())
+	_, err := driver.Execute(ctx, builder.String())
+	return err
 }
 
 func (m *MysqlMigratory) createAlterTableColumn(node *AlterColumnColumnNode, builder *strings.Builder, columnName string) {
@@ -311,9 +314,11 @@ func (m *MysqlMigratory) createAlterTableColumn(node *AlterColumnColumnNode, bui
 }
 
 func (m *MysqlMigratory) RenameTable(ctx context.Context, driver Driver, tableName string, newTableName string, _ *AttributesNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("RENAME TABLE %s TO %s", m.Quote(tableName), m.Quote(newTableName)))
+	_, err := driver.Execute(ctx, fmt.Sprintf("RENAME TABLE %s TO %s", m.Quote(tableName), m.Quote(newTableName)))
+	return err
 }
 
 func (m *MysqlMigratory) AlterTableComment(ctx context.Context, driver Driver, tableName string, comment string, _ *AttributesNode) error {
-	return driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s COMMENT '%s'", m.Quote(tableName), ReplaceComment(comment)))
+	_, err := driver.Execute(ctx, fmt.Sprintf("ALTER TABLE %s COMMENT '%s'", m.Quote(tableName), ReplaceComment(comment)))
+	return err
 }

@@ -2,6 +2,7 @@ package dbfly
 
 import (
 	"context"
+	sql2 "database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -112,7 +113,7 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 		}
 
 		// 2. 乐观锁：查询当前版本
-		currentVersion := -1
+		currentVersion := 0
 		sql := fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1",
 			quoter.MustQuote(LOCK_COLUMN_VERSION),
 			quoter.MustQuote(l.tableName),
@@ -121,8 +122,7 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 		if currentVersion, err = doGetScalar[int](ctx, driver, sql); err != nil && !errors.Is(err, NoData) {
 			return nil, Wrap(err, "get current database schema failed")
 		}
-
-		if currentVersion > -1 {
+		if currentVersion > 0 {
 			newVersion := currentVersion + 1
 
 			// 3. UPDATE 带版本号条件（原子判断）
@@ -134,7 +134,14 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 				quoter.MustQuote(LOCK_COLUMN_VERSION),
 				quoter.MustQuote(LOCK_COLUMN_ID),
 				quoter.MustQuote(LOCK_COLUMN_VERSION))
-			if err = driver.Execute(ctx, updateSQL, hostname, time.Now(), newVersion, currentVersion); err != nil {
+			var result sql2.Result
+			if result, err = driver.Execute(ctx, updateSQL, hostname, time.Now(), newVersion, currentVersion); err != nil {
+				// UPDATE 失败（版本不匹配），等待后重试
+				fly.logger.Warn("lock acquisition retry", "attempt", retry+1, "maxRetries", l.maxRetries)
+				time.Sleep(l.retryInterval)
+				continue
+			}
+			if affected, err := result.RowsAffected(); err != nil || affected == 0 {
 				// UPDATE 失败（版本不匹配），等待后重试
 				fly.logger.Warn("lock acquisition retry", "attempt", retry+1, "maxRetries", l.maxRetries)
 				time.Sleep(l.retryInterval)
@@ -151,7 +158,7 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 				quoter.MustQuote(LOCK_COLUMN_LOCKED_BY),
 				quoter.MustQuote(LOCK_COLUMN_LOCK_TIME),
 				quoter.MustQuote(LOCK_COLUMN_VERSION))
-			if err = driver.Execute(ctx, insertSQL, hostname, time.Now(), currentVersion); err != nil {
+			if _, err = driver.Execute(ctx, insertSQL, hostname, time.Now(), currentVersion); err != nil {
 				fly.logger.Warn("lock acquisition retry", "attempt", retry+1, "maxRetries", l.maxRetries)
 				// INSERT 失败（记录已存在），等待后重试
 				time.Sleep(l.retryInterval)
@@ -204,7 +211,7 @@ func (l *DbLocker) createLockTable(ctx context.Context, fly *Dbfly) error {
 		quoter.MustQuote(LOCK_COLUMN_LOCK_TIME), metaData.DataType(Timestamp),
 		quoter.MustQuote(LOCK_COLUMN_VERSION), metaData.DataType(Int))
 
-	if err = driver.Execute(ctx, sql); err != nil {
+	if _, err = driver.Execute(ctx, sql); err != nil {
 		// 创建失败，可能是并发已创建，再次检查
 		var reErr error
 		exists, _, reErr = metaData.ExistsTable(ctx, driver, l.tableName)
@@ -257,5 +264,6 @@ func (l *DbLocker) Unlock(ctx context.Context, fly *Dbfly, hostname string, vers
 		quoter.MustQuote(LOCK_COLUMN_ID),
 		quoter.MustQuote(LOCK_COLUMN_LOCKED_BY),
 		quoter.MustQuote(LOCK_COLUMN_VERSION))
-	return driver.Execute(ctx, sql, hostname, version)
+	_, err := driver.Execute(ctx, sql, hostname, version)
+	return err
 }

@@ -9,7 +9,7 @@ import (
 // Tx 事务接口
 type Tx interface {
 	// Execute 在事务中执行SQL
-	Execute(context.Context, string, ...interface{}) error
+	Execute(context.Context, string, ...interface{}) (sql.Result, error)
 	// Query 在事务中查询
 	Query(context.Context, string, ...interface{}) (Rows, error)
 	// Commit 提交事务
@@ -21,7 +21,7 @@ type Tx interface {
 // Driver 不同框架对数据库操作的驱动接口
 type Driver interface {
 	// Execute 执行SQL
-	Execute(context.Context, string, ...interface{}) error
+	Execute(context.Context, string, ...interface{}) (sql.Result, error)
 	// Query 查询
 	Query(context.Context, string, ...interface{}) (Rows, error)
 	// BeginTx 开始事务
@@ -46,9 +46,8 @@ func NewSqlDriver(db *sql.DB) *SqlDriver {
 	return &SqlDriver{db: db}
 }
 
-func (m *SqlDriver) Execute(ctx context.Context, sql string, values ...interface{}) error {
-	_, err := m.db.ExecContext(ctx, sql, values...)
-	return err
+func (m *SqlDriver) Execute(ctx context.Context, sql string, values ...interface{}) (sql.Result, error) {
+	return m.db.ExecContext(ctx, sql, values...)
 }
 
 func (m *SqlDriver) Query(ctx context.Context, sql string, values ...interface{}) (Rows, error) {
@@ -68,9 +67,8 @@ type sqlTx struct {
 	tx *sql.Tx
 }
 
-func (t *sqlTx) Execute(ctx context.Context, sql string, values ...interface{}) error {
-	_, err := t.tx.ExecContext(ctx, sql, values...)
-	return err
+func (t *sqlTx) Execute(ctx context.Context, sql string, values ...interface{}) (sql.Result, error) {
+	return t.tx.ExecContext(ctx, sql, values...)
 }
 
 func (t *sqlTx) Query(ctx context.Context, sql string, values ...interface{}) (Rows, error) {
