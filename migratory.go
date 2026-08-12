@@ -176,8 +176,6 @@ func (m *DefaultMigratory) CreateTableColumn(node *ColumnNode, builder *strings.
 		builder.WriteString(" DEFAULT ")
 		builder.WriteString(defaultValue)
 	}
-	// TODO
-	fmt.Printf("%+v\n", node)
 	if node.Unique {
 		builder.WriteString(" UNIQUE")
 	}
