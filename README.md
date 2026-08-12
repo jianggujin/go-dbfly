@@ -97,7 +97,7 @@ go get github.com/jianggujin/go-dbfly
         <createTable tableName="t_config" comment="配置表">
             <column columnName="key" dataType="VARCHAR" maxLength="100" primaryKey="true"/>
             <column columnName="value" dataType="TEXT"/>
-            <column columnName="created_at" dataType="TIMESTAMP" nullable="false"/>
+            <column columnName="created_at" dataType="TIMESTAMP" notnull="true"/>
         </createTable>
     </changeSet>
 </dbfly>
@@ -252,7 +252,7 @@ if err := fly.Migrate(); err != nil {
 ```xml
 <createTable tableName="users" comment="用户表">
     <column columnName="id" dataType="BIGINT" primaryKey="true"/>
-    <column columnName="name" dataType="VARCHAR" maxLength="100" nullable="false"/>
+    <column columnName="name" dataType="VARCHAR" maxLength="100" notnull="true"/>
 </createTable>
 ```
 
@@ -288,18 +288,18 @@ if err := fly.Migrate(); err != nil {
 
 ### 列定义属性
 
-| 属性 | 说明 |
-|------|------|
-| columnName | 列名 |
-| dataType | 数据类型（标准类型） |
+| 属性 | 说明               |
+|------|------------------|
+| columnName | 列名               |
+| dataType | 数据类型（标准类型）       |
 | maxLength | 长度（VARCHAR/CHAR） |
-| numericScale | 小数位数（DECIMAL） |
-| nullable | 是否允许空值 |
-| primaryKey | 是否主键 |
-| unique | 是否唯一 |
-| defaultValue | 默认值（自动引用） |
-| defaultOriginValue | 默认值（原始 SQL） |
-| comment | 列注释 |
+| numericScale | 小数位数（DECIMAL）    |
+| notnull | 是否不为空           |
+| primaryKey | 是否主键             |
+| unique | 是否唯一             |
+| defaultValue | 默认值（自动引用）        |
+| defaultOriginValue | 默认值（原始 SQL）      |
+| comment | 列注释              |
 
 ## DML 操作
 

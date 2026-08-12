@@ -247,7 +247,7 @@ type ColumnNode struct {
 	DataType           string            `xml:"dataType,attr"`
 	MaxLength          int               `xml:"maxLength,attr"`
 	NumericScale       int               `xml:"numericScale,attr"`
-	Nullable           bool              `xml:"nullable,attr"`
+	Notnull            bool              `xml:"notnull,attr"`
 	Unique             bool              `xml:"unique,attr"`
 	PrimaryKey         bool              `xml:"primaryKey,attr"`
 	KeyName            string            `xml:"keyName,attr"`
@@ -360,7 +360,7 @@ type AddColumnColumnNode struct {
 	DataType           string            `xml:"dataType,attr"`
 	MaxLength          int               `xml:"maxLength,attr"`
 	NumericScale       int               `xml:"numericScale,attr"`
-	Nullable           bool              `xml:"nullable,attr"`
+	Notnull            bool              `xml:"notnull,attr"`
 	Unique             bool              `xml:"unique,attr"`
 	DefaultValue       string            `xml:"defaultValue,attr"`
 	DefaultOriginValue string            `xml:"defaultOriginValue,attr"`
@@ -404,7 +404,7 @@ type AlterColumnColumnNode struct {
 	DataType           string            `xml:"dataType,attr"`
 	MaxLength          int               `xml:"maxLength,attr"`
 	NumericScale       int               `xml:"numericScale,attr"`
-	Nullable           bool              `xml:"nullable,attr"`
+	Notnull            bool              `xml:"notnull,attr"`
 	Unique             bool              `xml:"unique,attr"`
 	DefaultValue       string            `xml:"defaultValue,attr"`
 	DefaultOriginValue string            `xml:"defaultOriginValue,attr"`
@@ -661,7 +661,7 @@ func (n *InsertNode) Execute(ctx context.Context, fly *Dbfly) error {
 			builder.WriteString(")")
 		}
 		sql = builder.String()
-		fly.logger.Debug("insert", "tableName", n.TableName, "rows", len(n.Rows))
+		fly.logger.Debug("execute insert into table %q, rows: %d", n.TableName, len(n.Rows))
 		_, err := fly.Execute(ctx, sql)
 		return err
 	}
@@ -689,7 +689,7 @@ func (n *InsertNode) Execute(ctx context.Context, fly *Dbfly) error {
 	}
 	builder.WriteString(")")
 	sql = builder.String()
-	fly.logger.Debug("insert", "tableName", n.TableName, "rows", 1)
+	fly.logger.Debug("execute insert into table %q, rows: 1", n.TableName)
 	_, err := fly.Execute(ctx, sql)
 	return err
 }
@@ -724,7 +724,7 @@ func (n *UpdateNode) Execute(ctx context.Context, fly *Dbfly) error {
 		builder.WriteString(n.Where)
 	}
 	sql := builder.String()
-	fly.logger.Debug("update", "tableName", n.TableName)
+	fly.logger.Debug("execute update table %q", n.TableName)
 	_, err := fly.Execute(ctx, sql)
 	return err
 }
@@ -749,7 +749,7 @@ func (n *DeleteNode) Execute(ctx context.Context, fly *Dbfly) error {
 		builder.WriteString(n.Where)
 	}
 	sql := builder.String()
-	fly.logger.Debug("delete", "tableName", n.TableName)
+	fly.logger.Debug("execute delete from table %q", n.TableName)
 	_, err := fly.Execute(ctx, sql)
 	return err
 }
@@ -826,7 +826,7 @@ func (n *TransactionNode) UnmarshalXML(decoder *xml.Decoder, start xml.StartElem
 }
 
 func (n *TransactionNode) Execute(ctx context.Context, fly *Dbfly) error {
-	fly.logger.Debug("transaction begin", "dmlCount", len(n.DMLs))
+	fly.logger.Debug("transaction begin, dml count: %d", len(n.DMLs))
 	tx, err := fly.driver.BeginTx(ctx)
 	if err != nil {
 		return Wrap(err, "failed to begin transaction")
@@ -839,15 +839,15 @@ func (n *TransactionNode) Execute(ctx context.Context, fly *Dbfly) error {
 	for _, ddl := range n.DMLs {
 		if err = ddl.Execute(ctx, fly); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				fly.logger.Error("transaction rollback failed", "error", rbErr)
+				fly.logger.Error("operation failed: %+v, rollback also failed: %+v", err, rbErr)
 				return New("operation failed: %w, rollback also failed: %w", err, rbErr)
 			}
-			fly.logger.Debug("transaction rolled back", "error", err)
+			fly.logger.Debug("transaction rolled back, error: %+v", err)
 			return err
 		}
 	}
 	if err = tx.Commit(); err != nil {
-		fly.logger.Error("transaction commit failed", "error", err)
+		fly.logger.Error("failed to commit transaction: %+v", err)
 		return err
 	}
 	fly.logger.Debug("transaction committed")

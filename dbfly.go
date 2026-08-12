@@ -118,7 +118,7 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 		defer func() { f.driver = origDriver }()
 	}
 
-	f.logger.Info("migration started", "entrypoint", f.entrypoint)
+	f.logger.Info("migrate started, entrypoint: %s", f.entrypoint)
 
 	var unlock Unlock
 	defer func() {
@@ -143,7 +143,7 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 		return err
 	}
 
-	f.logger.Debug("changelog parsed", "changeSetCount", len(changeSets))
+	f.logger.Debug("changelog parsed, changeSet count: %d", len(changeSets))
 
 	// 检测重复 changeSet id
 	changeSetIds := make(map[string]bool)
@@ -184,7 +184,7 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 		}
 
 		orderExecuted++
-		f.logger.Info("change set executing", "id", cs.Id, "author", cs.Author)
+		f.logger.Info("execute change set, id: %s, author: %s", cs.Id, cs.Author)
 		if err = f.executeChangeSet(ctx, cs, orderExecuted); err != nil && "SKIP" != cs.OnFail {
 			return err
 		}
@@ -193,7 +193,7 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 		}
 	}
 
-	f.logger.Info("migration completed", "executed", orderExecuted, "skipped", skippedCount)
+	f.logger.Info("migrate completed, executed: %d, skipped: %d", orderExecuted, skippedCount)
 	return nil
 }
 

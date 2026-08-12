@@ -87,7 +87,7 @@ func (m *DefaultMigratory) DataType(str string) string {
 }
 
 func (m *DefaultMigratory) CreateTable(ctx context.Context, driver Driver, tableName string, comment string, columns []*ColumnNode, _ *AttributesNode) error {
-	m.logger.Debug("create table", "tableName", tableName)
+	m.logger.Debug("create table %q", tableName)
 	var builder strings.Builder
 	builder.WriteString("CREATE TABLE ")
 	m.QuoteTo(&builder, tableName)
@@ -176,10 +176,12 @@ func (m *DefaultMigratory) CreateTableColumn(node *ColumnNode, builder *strings.
 		builder.WriteString(" DEFAULT ")
 		builder.WriteString(defaultValue)
 	}
+	// TODO
+	fmt.Printf("%+v\n", node)
 	if node.Unique {
 		builder.WriteString(" UNIQUE")
 	}
-	if !node.Nullable {
+	if node.Notnull {
 		builder.WriteString(" NOT NULL")
 	}
 	return false
@@ -190,7 +192,7 @@ func (m *DefaultMigratory) CreateIndex(ctx context.Context, driver Driver, table
 	if unique {
 		uniqueStr = "true"
 	}
-	m.logger.Debug("create index", "tableName", tableName, "indexName", indexName, "unique", uniqueStr)
+	m.logger.Debug("create index, tableName: %q, indexName: %q, unique: %s", tableName, indexName, uniqueStr)
 	var builder strings.Builder
 	builder.WriteString("CREATE")
 	if unique {
@@ -212,7 +214,7 @@ func (m *DefaultMigratory) CreateIndex(ctx context.Context, driver Driver, table
 }
 
 func (m *DefaultMigratory) CreatePrimaryKey(ctx context.Context, driver Driver, tableName string, keyName string, columns []*IndexColumnNode, _ *AttributesNode) error {
-	m.logger.Debug("create primary key", "tableName", tableName, "keyName", keyName)
+	m.logger.Debug("create primary key, tableName: %q, keyName: %q", tableName, keyName)
 	var builder strings.Builder
 	builder.WriteString("ALTER TABLE ")
 	m.QuoteTo(&builder, tableName)
@@ -230,21 +232,21 @@ func (m *DefaultMigratory) CreatePrimaryKey(ctx context.Context, driver Driver, 
 }
 
 func (m *DefaultMigratory) DropTable(ctx context.Context, driver Driver, tableName string, _ *AttributesNode) error {
-	m.logger.Debug("drop table", "tableName", tableName)
+	m.logger.Debug("drop table %q", tableName)
 	sql := fmt.Sprintf("DROP TABLE %s", m.Quote(tableName))
 	_, err := driver.Execute(ctx, sql)
 	return err
 }
 
 func (m *DefaultMigratory) DropIndex(ctx context.Context, driver Driver, _, indexName string, _ *AttributesNode) error {
-	m.logger.Debug("drop index", "indexName", indexName)
+	m.logger.Debug("drop index %q", indexName)
 	sql := fmt.Sprintf("DROP INDEX %s", m.Quote(indexName))
 	_, err := driver.Execute(ctx, sql)
 	return err
 }
 
 func (m *DefaultMigratory) AddColumn(ctx context.Context, driver Driver, tableName string, columns []*AddColumnColumnNode, _ *AttributesNode) error {
-	m.logger.Debug("add column", "tableName", tableName, "columnCount", len(columns))
+	m.logger.Debug("add column, tableName: %q, columnCount: %d", tableName, len(columns))
 	for _, column := range columns {
 		var builder strings.Builder
 		builder.WriteString("ALTER TABLE ")
@@ -300,13 +302,13 @@ func (m *DefaultMigratory) CreateAddTableColumn(node *AddColumnColumnNode, build
 	if node.Unique {
 		builder.WriteString(" UNIQUE")
 	}
-	if !node.Nullable {
+	if node.Notnull {
 		builder.WriteString(" NOT NULL")
 	}
 }
 
 func (m *DefaultMigratory) RenameColumn(ctx context.Context, driver Driver, tableName string, columnName string, newColumnName string, _ *AttributesNode) error {
-	m.logger.Debug("rename column", "tableName", tableName, "columnName", columnName, "newColumnName", newColumnName)
+	m.logger.Debug("rename column, tableName: %q, columnName: %q, newColumnName: %q", tableName, columnName, newColumnName)
 	var builder strings.Builder
 	builder.WriteString("ALTER TABLE ")
 	m.QuoteTo(&builder, tableName)
@@ -319,7 +321,7 @@ func (m *DefaultMigratory) RenameColumn(ctx context.Context, driver Driver, tabl
 }
 
 func (m *DefaultMigratory) AlterColumn(ctx context.Context, driver Driver, tableName string, columnName string, column *AlterColumnColumnNode, _ *AttributesNode) error {
-	m.logger.Debug("alter column", "tableName", tableName, "columnName", columnName)
+	m.logger.Debug("alter column, tableName: %q, columnName: %q", tableName, columnName)
 	var builder strings.Builder
 	builder.WriteString("ALTER TABLE ")
 	m.QuoteTo(&builder, tableName)
@@ -364,34 +366,34 @@ func (m *DefaultMigratory) CreateAlterTableColumn(node *AlterColumnColumnNode, b
 	if node.Unique {
 		builder.WriteString(" UNIQUE")
 	}
-	if !node.Nullable {
+	if node.Notnull {
 		builder.WriteString(" NOT NULL")
 	}
 }
 
 func (m *DefaultMigratory) DropColumn(ctx context.Context, driver Driver, tableName string, columnName string, _ *AttributesNode) error {
-	m.logger.Debug("drop column", "tableName", tableName, "columnName", columnName)
+	m.logger.Debug("drop column, tableName: %q, columnName: %q", tableName, columnName)
 	sql := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", m.Quote(tableName), m.Quote(columnName))
 	_, err := driver.Execute(ctx, sql)
 	return err
 }
 
 func (m *DefaultMigratory) DropPrimaryKey(ctx context.Context, driver Driver, tableName string, _ *AttributesNode) error {
-	m.logger.Debug("drop primary key", "tableName", tableName)
+	m.logger.Debug("drop primary key, tableName: %q", tableName)
 	sql := fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", m.Quote(tableName))
 	_, err := driver.Execute(ctx, sql)
 	return err
 }
 
 func (m *DefaultMigratory) RenameTable(ctx context.Context, driver Driver, tableName string, newTableName string, _ *AttributesNode) error {
-	m.logger.Debug("rename table", "tableName", tableName, "newTableName", newTableName)
+	m.logger.Debug("rename table, tableName: %q, newTableName: %q", tableName, newTableName)
 	sql := fmt.Sprintf("ALTER TABLE %s RENAME TO %s", m.Quote(tableName), m.Quote(newTableName))
 	_, err := driver.Execute(ctx, sql)
 	return err
 }
 
 func (m *DefaultMigratory) AlterTableComment(ctx context.Context, driver Driver, tableName string, comment string, _ *AttributesNode) error {
-	m.logger.Debug("alter table comment", "tableName", tableName)
+	m.logger.Debug("alter table %q comment", tableName)
 	sql := fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", m.Quote(tableName), ReplaceComment(comment))
 	_, err := driver.Execute(ctx, sql)
 	return err

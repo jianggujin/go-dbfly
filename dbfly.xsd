@@ -387,7 +387,7 @@
                     <xsd:documentation xml:lang="zh-CN">精度，根据数据类型判断设置此值</xsd:documentation>
                 </xsd:annotation>
             </xsd:attribute>
-            <xsd:attribute name="nullable" type="boolean" default="true">
+            <xsd:attribute name="notnull" type="boolean" default="false">
                 <xsd:annotation>
                     <xsd:documentation xml:lang="zh-CN">是否允许为null</xsd:documentation>
                 </xsd:annotation>
@@ -632,7 +632,7 @@
                                 <xsd:documentation xml:lang="zh-CN">精度，根据数据类型判断设置此值</xsd:documentation>
                             </xsd:annotation>
                         </xsd:attribute>
-                        <xsd:attribute name="nullable" type="boolean" default="true">
+                        <xsd:attribute name="notnull" type="boolean" default="false">
                             <xsd:annotation>
                                 <xsd:documentation xml:lang="zh-CN">是否允许为null</xsd:documentation>
                             </xsd:annotation>
@@ -723,7 +723,7 @@
                                 <xsd:documentation xml:lang="zh-CN">精度，根据数据类型判断设置此值</xsd:documentation>
                             </xsd:annotation>
                         </xsd:attribute>
-                        <xsd:attribute name="nullable" type="boolean" default="true">
+                        <xsd:attribute name="notnull" type="boolean" default="false">
                             <xsd:annotation>
                                 <xsd:documentation xml:lang="zh-CN">是否允许为null</xsd:documentation>
                             </xsd:annotation>

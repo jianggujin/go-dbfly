@@ -128,7 +128,7 @@ func (r *DbRecorder) NewChangeLog(ctx context.Context, fly *Dbfly, changeSetId, 
 		changeSetId, author, filename, orderExecuted, time.Now(), time.Now()); err != nil {
 		return err
 	}
-	fly.logger.Debug("change log created", "changeSetId", changeSetId)
+	fly.logger.Debug("change log created, changeSetId: %q", changeSetId)
 	return nil
 }
 
@@ -144,6 +144,6 @@ func (r *DbRecorder) CompleteChangeLog(ctx context.Context, fly *Dbfly, changeSe
 		time.Now(), changeSetId); err != nil {
 		return err
 	}
-	fly.logger.Debug("change log completed", "changeSetId", changeSetId)
+	fly.logger.Debug("change log completed, changeSetId: %q", changeSetId)
 	return nil
 }

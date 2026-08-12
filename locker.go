@@ -108,8 +108,8 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 	for retry := 0; retry < l.maxRetries; retry++ {
 		// 检查超时
 		if time.Now().After(deadline) {
-			fly.logger.Error("lock acquisition timeout", "timeout", l.timeout)
-			return nil, New("lock acquisition timeout after %v", l.timeout)
+			fly.logger.Error("lock acquisition timeout after %d", l.timeout)
+			return nil, New("lock acquisition timeout after %d", l.timeout)
 		}
 
 		// 2. 乐观锁：查询当前版本
@@ -137,13 +137,13 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 			var result sql2.Result
 			if result, err = driver.Execute(ctx, updateSQL, hostname, time.Now(), newVersion, currentVersion); err != nil {
 				// UPDATE 失败（版本不匹配），等待后重试
-				fly.logger.Warn("lock acquisition retry", "attempt", retry+1, "maxRetries", l.maxRetries)
+				fly.logger.Warn("retry lock acquisition, attempt: %d, maxRetries: %d", retry+1, l.maxRetries)
 				time.Sleep(l.retryInterval)
 				continue
 			}
 			if affected, err := result.RowsAffected(); err != nil || affected == 0 {
 				// UPDATE 失败（版本不匹配），等待后重试
-				fly.logger.Warn("lock acquisition retry", "attempt", retry+1, "maxRetries", l.maxRetries)
+				fly.logger.Warn("retry lock acquisition, attempt: %d, maxRetries: %d", retry+1, l.maxRetries)
 				time.Sleep(l.retryInterval)
 				continue
 			}
@@ -159,7 +159,7 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 				quoter.MustQuote(LOCK_COLUMN_LOCK_TIME),
 				quoter.MustQuote(LOCK_COLUMN_VERSION))
 			if _, err = driver.Execute(ctx, insertSQL, hostname, time.Now(), currentVersion); err != nil {
-				fly.logger.Warn("lock acquisition retry", "attempt", retry+1, "maxRetries", l.maxRetries)
+				fly.logger.Warn("retry lock acquisition, attempt: %d, maxRetries: %d", retry+1, l.maxRetries)
 				// INSERT 失败（记录已存在），等待后重试
 				time.Sleep(l.retryInterval)
 				continue
@@ -173,7 +173,7 @@ func (l *DbLocker) Lock(ctx context.Context, fly *Dbfly) (Unlock, error) {
 			return nil, err
 		}
 		if lockedBy != hostname || currentVersion != version {
-			fly.logger.Warn("lock acquisition retry", "attempt", retry+1, "maxRetries", l.maxRetries)
+			fly.logger.Warn("retry lock acquisition, attempt: %d, maxRetries: %d", retry+1, l.maxRetries)
 			// 验证失败，等待后重试
 			time.Sleep(l.retryInterval)
 			continue
