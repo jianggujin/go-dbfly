@@ -11,6 +11,10 @@ type DDL interface {
 	Execute(context.Context, *Dbfly) error
 }
 
+type Parser interface {
+	Parse(*StructureInfo) error
+}
+
 type Condition interface {
 	Check(context.Context, *Dbfly) (bool, error)
 }
@@ -241,6 +245,27 @@ func (n *CreateTableNode) Execute(ctx context.Context, fly *Dbfly) error {
 	return fly.Migratory().CreateTable(ctx, fly.Driver(), n.TableName, n.Comment, n.Columns, n.Attributes)
 }
 
+func (n *CreateTableNode) Info() *TableInfo {
+	info := &TableInfo{
+		TableName: n.TableName,
+		Comment:   n.Comment,
+		Columns:   make([]*ColumnInfo, 0, len(n.Columns)),
+	}
+	for _, column := range n.Columns {
+		info.Columns = append(info.Columns, column.Info())
+	}
+	return info
+}
+
+func (n *CreateTableNode) Parse(info *StructureInfo) error {
+	_, ok := info.FindTable(n.TableName)
+	if ok {
+		return New("duplicate table: %q", n.TableName)
+	}
+	info.SetTable(n.Info())
+	return nil
+}
+
 // ColumnNode 列节点
 type ColumnNode struct {
 	ColumnName         string            `xml:"columnName,attr"`
@@ -255,6 +280,25 @@ type ColumnNode struct {
 	DefaultOriginValue string            `xml:"defaultOriginValue,attr"`
 	Comment            string            `xml:"comment,attr"`
 	ColumnDbms         []*ColumnDbmsNode `xml:"columnDbms"`
+}
+
+func (c *ColumnNode) Info() *ColumnInfo {
+	info := &ColumnInfo{
+		ColumnName:   c.ColumnName,
+		DataType:     c.DataType,
+		MaxLength:    c.MaxLength,
+		NumericScale: c.NumericScale,
+		Notnull:      c.Notnull,
+		Unique:       c.Unique,
+		PrimaryKey:   c.PrimaryKey,
+		DefaultValue: c.DefaultValue,
+		KeyName:      c.KeyName,
+		Comment:      c.Comment,
+	}
+	if c.DefaultOriginValue != "" {
+		info.DefaultValue = c.DefaultOriginValue
+	}
+	return info
 }
 
 type ColumnDbmsNode struct {
@@ -291,6 +335,27 @@ func (n *CreateIndexNode) Execute(ctx context.Context, fly *Dbfly) error {
 	return fly.Migratory().CreateIndex(ctx, fly.Driver(), n.TableName, n.IndexName, n.Unique, n.Columns, n.Attributes)
 }
 
+func (n *CreateIndexNode) Info() *IndexInfo {
+	info := &IndexInfo{
+		IndexName: n.IndexName,
+		Unique:    n.Unique,
+		Columns:   make([]string, 0, len(n.Columns)),
+	}
+	for _, column := range n.Columns {
+		info.Columns = append(info.Columns, column.Name)
+	}
+	return info
+}
+
+func (n *CreateIndexNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	if _, ok := table.FindIndex(n.IndexName); ok {
+		return New("duplicate index %q on %q", n.IndexName, n.TableName)
+	}
+	table.Indexes = append(table.Indexes, n.Info())
+	return nil
+}
+
 type IndexColumnNode struct {
 	Name string `xml:"name,attr"`
 }
@@ -311,6 +376,19 @@ func (n *CreatePrimaryKeyNode) Execute(ctx context.Context, fly *Dbfly) error {
 	return fly.Migratory().CreatePrimaryKey(ctx, fly.Driver(), n.TableName, n.KeyName, n.Columns, n.Attributes)
 }
 
+func (n *CreatePrimaryKeyNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	for _, column := range n.Columns {
+		ci, ok := table.FindColumn(column.Name)
+		if !ok {
+			return New("column %q on %q not found", column.Name, n.TableName)
+		}
+		ci.PrimaryKey = true
+		ci.KeyName = n.KeyName
+	}
+	return nil
+}
+
 // DropTableNode 删除表节点
 type DropTableNode struct {
 	TableName  string          `xml:"tableName,attr"`
@@ -323,6 +401,12 @@ func (n *DropTableNode) Execute(ctx context.Context, fly *Dbfly) error {
 		return err
 	}
 	return fly.Migratory().DropTable(ctx, fly.Driver(), n.TableName, n.Attributes)
+}
+
+func (n *DropTableNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	info.RemoveTable(table.TableName)
+	return nil
 }
 
 // DropIndexNode 删除索引节点
@@ -340,6 +424,14 @@ func (n *DropIndexNode) Execute(ctx context.Context, fly *Dbfly) error {
 	return fly.Migratory().DropIndex(ctx, fly.Driver(), n.TableName, n.IndexName, n.Attributes)
 }
 
+func (n *DropIndexNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	if _, ok := table.RemoveIndex(n.IndexName); !ok {
+		return New("index %q on %q not found", n.IndexName, n.TableName)
+	}
+	return nil
+}
+
 // AddColumnNode 添加列节点
 type AddColumnNode struct {
 	TableName  string                 `xml:"tableName,attr"`
@@ -355,6 +447,18 @@ func (n *AddColumnNode) Execute(ctx context.Context, fly *Dbfly) error {
 	return fly.Migratory().AddColumn(ctx, fly.Driver(), n.TableName, n.Columns, n.Attributes)
 }
 
+func (n *AddColumnNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	for _, column := range n.Columns {
+		_, ok := table.FindColumn(column.ColumnName)
+		if ok {
+			return New("duplicate column %q on %q", column.ColumnName, n.TableName)
+		}
+		table.Columns = append(table.Columns, column.Info())
+	}
+	return nil
+}
+
 type AddColumnColumnNode struct {
 	ColumnName         string            `xml:"columnName,attr"`
 	DataType           string            `xml:"dataType,attr"`
@@ -366,6 +470,25 @@ type AddColumnColumnNode struct {
 	DefaultOriginValue string            `xml:"defaultOriginValue,attr"`
 	Comment            string            `xml:"comment,attr"`
 	ColumnDbms         []*ColumnDbmsNode `xml:"columnDbms"`
+}
+
+func (c *AddColumnColumnNode) Info() *ColumnInfo {
+	info := &ColumnInfo{
+		ColumnName:   c.ColumnName,
+		DataType:     c.DataType,
+		MaxLength:    c.MaxLength,
+		NumericScale: c.NumericScale,
+		Notnull:      c.Notnull,
+		Unique:       c.Unique,
+		PrimaryKey:   false,
+		DefaultValue: c.DefaultValue,
+		KeyName:      "",
+		Comment:      c.Comment,
+	}
+	if c.DefaultOriginValue != "" {
+		info.DefaultValue = c.DefaultOriginValue
+	}
+	return info
 }
 
 // RenameColumnNode 重命名列节点
@@ -384,6 +507,16 @@ func (n *RenameColumnNode) Execute(ctx context.Context, fly *Dbfly) error {
 	return fly.Migratory().RenameColumn(ctx, fly.Driver(), n.TableName, n.ColumnName, n.NewColumnName, n.Attributes)
 }
 
+func (n *RenameColumnNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	column, ok := table.FindColumn(n.ColumnName)
+	if !ok {
+		return New("column %q on %q not found", n.ColumnName, n.TableName)
+	}
+	column.ColumnName = n.NewColumnName
+	return nil
+}
+
 // AlterColumnNode 修改列节点
 type AlterColumnNode struct {
 	TableName  string                 `xml:"tableName,attr"`
@@ -400,6 +533,16 @@ func (n *AlterColumnNode) Execute(ctx context.Context, fly *Dbfly) error {
 	return fly.Migratory().AlterColumn(ctx, fly.Driver(), n.TableName, n.ColumnName, n.Column, n.Attributes)
 }
 
+func (n *AlterColumnNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	column, ok := table.FindColumn(n.ColumnName)
+	if !ok {
+		return New("column %q on %q not found", n.ColumnName, n.TableName)
+	}
+	n.Column.Info(column)
+	return nil
+}
+
 type AlterColumnColumnNode struct {
 	DataType           string            `xml:"dataType,attr"`
 	MaxLength          int               `xml:"maxLength,attr"`
@@ -410,6 +553,22 @@ type AlterColumnColumnNode struct {
 	DefaultOriginValue string            `xml:"defaultOriginValue,attr"`
 	Comment            string            `xml:"comment,attr"`
 	ColumnDbms         []*ColumnDbmsNode `xml:"columnDbms"`
+}
+
+func (c *AlterColumnColumnNode) Info(info *ColumnInfo) *ColumnInfo {
+	info.DataType = c.DataType
+	info.MaxLength = c.MaxLength
+	info.NumericScale = c.NumericScale
+	info.Notnull = c.Notnull
+	info.Unique = c.Unique
+	info.PrimaryKey = false
+	info.DefaultValue = c.DefaultValue
+	info.KeyName = ""
+	info.Comment = c.Comment
+	if c.DefaultOriginValue != "" {
+		info.DefaultValue = c.DefaultOriginValue
+	}
+	return info
 }
 
 // DropColumnNode 删除列节点
@@ -427,6 +586,14 @@ func (n *DropColumnNode) Execute(ctx context.Context, fly *Dbfly) error {
 	return fly.Migratory().DropColumn(ctx, fly.Driver(), n.TableName, n.ColumnName, n.Attributes)
 }
 
+func (n *DropColumnNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	if _, ok := table.RemoveColumn(n.ColumnName); !ok {
+		return New("column %q on %q not found", n.ColumnName, n.TableName)
+	}
+	return nil
+}
+
 // DropPrimaryKeyNode 删除主键节点
 type DropPrimaryKeyNode struct {
 	TableName  string          `xml:"tableName,attr"`
@@ -439,6 +606,15 @@ func (n *DropPrimaryKeyNode) Execute(ctx context.Context, fly *Dbfly) error {
 		return err
 	}
 	return fly.Migratory().DropPrimaryKey(ctx, fly.Driver(), n.TableName, n.Attributes)
+}
+
+func (n *DropPrimaryKeyNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	for _, column := range table.Columns {
+		column.PrimaryKey = false
+		column.KeyName = ""
+	}
+	return nil
 }
 
 // RenameTableNode 重命名表节点
@@ -456,6 +632,14 @@ func (n *RenameTableNode) Execute(ctx context.Context, fly *Dbfly) error {
 	return fly.Migratory().RenameTable(ctx, fly.Driver(), n.TableName, n.NewTableName, n.Attributes)
 }
 
+func (n *RenameTableNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	info.RemoveTable(n.TableName)
+	table.TableName = n.NewTableName
+	info.SetTable(table)
+	return nil
+}
+
 // AlterTableCommentNode 重命名表说明节点
 type AlterTableCommentNode struct {
 	TableName  string          `xml:"tableName,attr"`
@@ -469,6 +653,12 @@ func (n *AlterTableCommentNode) Execute(ctx context.Context, fly *Dbfly) error {
 		return err
 	}
 	return fly.Migratory().AlterTableComment(ctx, fly.Driver(), n.TableName, n.Comment, n.Attributes)
+}
+
+func (n *AlterTableCommentNode) Parse(info *StructureInfo) error {
+	table := info.MustTable(n.TableName)
+	table.Comment = n.Comment
+	return nil
 }
 
 // SqlFileNode SQL脚本节点
@@ -519,6 +709,17 @@ func (n *ChangeSetNode) Execute(ctx context.Context, fly *Dbfly) error {
 	for _, ddl := range n.DDLs {
 		if err := ddl.Execute(ctx, fly); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (n *ChangeSetNode) Parse(info *StructureInfo) error {
+	for _, ddl := range n.DDLs {
+		if parser, ok := ddl.(Parser); ok {
+			if err := parser.Parse(info); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

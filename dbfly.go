@@ -138,7 +138,7 @@ func (f *Dbfly) MigrateContext(ctx context.Context) (err error) {
 	}()
 
 	// 解析 changelog
-	changeSets, err := f.parseChangelog(f.entrypoint, make(map[string]bool))
+	changeSets, err := parseChangelog(f.source, f.entrypoint, make(map[string]bool))
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (f *Dbfly) executeChangeSet(ctx context.Context, cs ChangeSet, orderExecute
 }
 
 // parseChangelog 递归解析 changelog 文件
-func (f *Dbfly) parseChangelog(path string, visited map[string]bool) (ChangeSets, error) {
+func parseChangelog(source Source, path string, visited map[string]bool) (ChangeSets, error) {
 	// 循环引用检测
 	if visited[path] {
 		return nil, New("circular reference detected: %s", path)
@@ -223,13 +223,13 @@ func (f *Dbfly) parseChangelog(path string, visited map[string]bool) (ChangeSets
 	visited[path] = true
 
 	// 读取文件内容
-	content, err := f.source.Read(path)
+	content, err := source.Read(path)
 	if err != nil {
 		return nil, err
 	}
 
 	// 解析 XML
-	changeSets, err := f.parseXmlContent(path, content, visited)
+	changeSets, err := parseXmlContent(source, path, content, visited)
 	if err != nil {
 		return nil, Wrap(err, "parse changelog %s failed", path)
 	}
@@ -238,7 +238,7 @@ func (f *Dbfly) parseChangelog(path string, visited map[string]bool) (ChangeSets
 }
 
 // parseXmlContent 解析 XML 内容
-func (f *Dbfly) parseXmlContent(filename string, content []byte, visited map[string]bool) (ChangeSets, error) {
+func parseXmlContent(source Source, filename string, content []byte, visited map[string]bool) (ChangeSets, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(content))
 	var changeSets ChangeSets
 	var currentChangeSet *ChangeSet
@@ -299,7 +299,7 @@ func (f *Dbfly) parseXmlContent(filename string, content []byte, visited map[str
 				} else {
 					include.File = strings.TrimLeft(include.File, "/")
 				}
-				includedChangeSets, err := f.parseChangelog(include.File, visited)
+				includedChangeSets, err := parseChangelog(source, include.File, visited)
 				if err != nil {
 					return nil, err
 				}
@@ -321,29 +321,4 @@ func isValidChangeSetId(id string) bool {
 	}
 	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_\-\.]+$`, id)
 	return matched
-}
-
-// isDDLElement 判断是否为有效的 DDL 元素
-func isDDLElement(name string) bool {
-	ddlElements := map[string]bool{
-		"createTable":       true,
-		"createIndex":       true,
-		"createPrimaryKey":  true,
-		"dropTable":         true,
-		"dropIndex":         true,
-		"addColumn":         true,
-		"renameColumn":      true,
-		"alterColumn":       true,
-		"dropColumn":        true,
-		"dropPrimaryKey":    true,
-		"renameTable":       true,
-		"alterTableComment": true,
-		"sqlFile":           true,
-		"insert":            true,
-		"update":            true,
-		"delete":            true,
-		"sqlInline":         true,
-		"transaction":       true,
-	}
-	return ddlElements[name]
 }
