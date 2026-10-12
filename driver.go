@@ -39,39 +39,56 @@ type Rows interface {
 
 // SqlDriver 原生sql驱动实现
 type SqlDriver struct {
-	db *sql.DB
+	db     *sql.DB
+	binder Binder
 }
 
-func NewSqlDriver(db *sql.DB) *SqlDriver {
-	return &SqlDriver{db: db}
+func NewSqlDriver(db *sql.DB, binder Binder) *SqlDriver {
+	if binder == nil {
+		binder = Question
+	}
+	return &SqlDriver{db: db, binder: binder}
 }
 
-func (m *SqlDriver) Execute(ctx context.Context, sql string, values ...interface{}) (sql.Result, error) {
-	return m.db.ExecContext(ctx, sql, values...)
+func (d *SqlDriver) Execute(ctx context.Context, sql string, values ...interface{}) (sql.Result, error) {
+	if len(values) > 0 {
+		sql = d.binder.Rebind(sql)
+	}
+	return d.db.ExecContext(ctx, sql, values...)
 }
 
-func (m *SqlDriver) Query(ctx context.Context, sql string, values ...interface{}) (Rows, error) {
-	return m.db.QueryContext(ctx, sql, values...)
+func (d *SqlDriver) Query(ctx context.Context, sql string, values ...interface{}) (Rows, error) {
+	if len(values) > 0 {
+		sql = d.binder.Rebind(sql)
+	}
+	return d.db.QueryContext(ctx, sql, values...)
 }
 
-func (m *SqlDriver) BeginTx(ctx context.Context) (Tx, error) {
-	tx, err := m.db.BeginTx(ctx, nil)
+func (d *SqlDriver) BeginTx(ctx context.Context) (Tx, error) {
+	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	return &sqlTx{tx: tx}, nil
+	return &sqlTx{tx: tx, binder: d.binder}, nil
 }
 
 // sqlTx 基于原生sql.Tx的事务实现
 type sqlTx struct {
-	tx *sql.Tx
+	tx     *sql.Tx
+	binder Binder
 }
 
 func (t *sqlTx) Execute(ctx context.Context, sql string, values ...interface{}) (sql.Result, error) {
+	if len(values) > 0 {
+		sql = t.binder.Rebind(sql)
+	}
 	return t.tx.ExecContext(ctx, sql, values...)
 }
 
 func (t *sqlTx) Query(ctx context.Context, sql string, values ...interface{}) (Rows, error) {
+	if len(values) > 0 {
+		sql = t.binder.Rebind(sql)
+	}
 	return t.tx.QueryContext(ctx, sql, values...)
 }
 
